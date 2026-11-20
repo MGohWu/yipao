@@ -1,0 +1,228 @@
+# 混淆规则。只在 release 生效，见 build-profile.json5 的 buildOptionSet。
+#
+# 白名单的取舍标准只有一条：这个名字出了这个 HAP 之后，还有别人按字面量认它吗？
+# ——落盘的 JSON、发给服务端的字段、卡片按 key 取的值、@Monitor 里的属性路径。
+# 纯内部的类名、方法名、变量名一律不留。
+#
+# 混淆是全模块按名字统一改的，所以「同一次构建里写、同一次构建里读」本来不会出错。
+# 下面留的这些，都是会被上一个版本写下的数据、或者被 App 之外的东西读到的。
+
+# ---- 开关 ----
+-enable-property-obfuscation
+-enable-string-property-obfuscation
+-enable-toplevel-obfuscation
+-enable-filename-obfuscation
+-enable-export-obfuscation
+-compact
+-remove-log
+-remove-comments
+
+# 把工具链预置的白名单也收掉：DOM/WebWorker 那套语言默认名，和系统 API 声明里的形参名。
+# 项目里唯一沾 Web 的是 CarModel3DView，它注入的是模板字符串，不参与混淆。
+-extra-options strip-language-default
+-extra-options strip-system-api-args
+
+-keep-property-name
+
+# ── 1. 会话。落在 AssetVault 里，跨 App 升级读回来（LeapModels 的
+#       LeapSession / OldAuth / NewAuth / Vehicle / VehicleRoute）。
+#       改了名字，老版本存的那份就解不出来，用户直接被登出。
+deviceId
+appVersion
+subVersion
+phone
+oldAuth
+newAuth
+vehicles
+selectedVin
+selectedCarType
+selectedCarAlias
+route
+# 凭证换发的版本号。两个进程靠比它决定谁的 token 新，改了名就一律读成 undefined、
+# 一律按 0 算，仲裁整个失效——退回到互相覆盖凭证那个老毛病。
+authRevision
+accountId
+token
+refreshToken
+nickname
+tokenExpired
+tokenObtainedAt
+tokenExpiresAt
+gatewayAccountId
+accessToken
+accessTokenExpiresAt
+signKeyBase64
+vin
+carType
+name
+# Vehicle 的能力/权限位。同样落 AssetVault 跨版本读回：release 改了名，老会话里存的
+# 这些 key 就对不上，读回来全是 undefined——增程被当纯电、支持哨兵的车哨兵卡永不出现。
+# permission / isSentinelSupported / sentinelStale 是哨兵这次加的，isExtendRange /
+# abilitiesStale 是增程那套，一并留住。
+isExtendRange
+abilitiesStale
+permission
+isSentinelSupported
+sentinelStale
+appRegion
+appCenter
+
+# ── 2. 车况快照。App 进程和卡片进程共写同一个 JSON 文件（VehicleSnapshot），
+#       也跨版本读回。
+vehicleName
+soc
+gasolinePercent
+hasFuel
+mediumRangeText
+rangeKm
+energyRangeKm
+fuelRangeKm
+isLocked
+isCharging
+chargeLimit
+indoorTemp
+climateOn
+windowsClosed
+anyDoorOpen
+hasTireWarning
+locationName
+latitude
+longitude
+updatedAt
+reportedAt
+trunkOpen
+isDriving
+
+# ── 3. 卡片绑定数据。FormPusher 把 CardData 摊成普通对象交给 Form Kit，
+#       卡片那边是 @LocalStorageProp('字面量') 按名字取的——那些字面量在
+#       装饰器参数位上，不参与改名，所以这边的属性名必须原样留住。
+#       上面第 2 组已经覆盖了同名的那批，这里是 CardData 独有的。
+#       formImages 是 Form Kit 约定的文件描述符表 key，同理。
+headline
+freshness
+freshnessCompact
+needsAttention
+isStale
+carImage
+formImages
+directControl
+widgetButtons
+smallWidgetButtons
+lockText
+controlError
+
+# ── 4. 控车诊断。存首选项，跨版本读回
+#       （ControlDiagnostic / ReceiptSample / ControlOutcome 的枚举值）。
+label
+cmdid
+msgID
+sentAt
+outcome
+elapsed
+pollCount
+receiptResponses
+errorMessage
+at
+body
+confirmed
+timedOut
+sentOnly
+failed
+
+# ── 5. 字符串字面量属性名。开了 -enable-string-property-obfuscation 之后
+#       这些一样会被改名，而它们要么发给服务端、要么发给车端。
+#       空调指令体（LeapModels.LeapCommand.climate）：
+operate
+temperature
+windlevel
+mode
+circle
+wshld
+position
+#       HTTP 请求头（HttpTransport）。带连字符，只能靠 keep 兜：
+content-type
+#       JWT payload（LeapCrypto.jwtExpiryMilliseconds）：
+exp
+
+# ── 6. 卡片深链和桌面快捷方式的 want 参数。跨进程按名字取，写在 CardActionParams
+#       和 resources/base/profile/shortcuts_config.json（资源文件不混淆，所以那头
+#       写的是原名），读在 EntryAbility.handleDeepLink——读的这头会被混掉。
+leapAction
+leapRoute
+
+# ── 7. 通用字段名。这些名字和 SDK / ArkUI 的同名属性撞上，或在 JSON 解析里按
+#       字面量读写，显式留住比依赖巧合可靠。
+content
+category
+vehicle
+images
+code
+message
+data
+status
+deviceType
+result
+
+# ── 8. @Monitor 的属性路径是字符串字面量，在装饰器参数位上不改名，被监听的属性
+#       却会被 -enable-property-obfuscation 混掉。两边一错开，监听就静默失效——
+#       界面停止更新，不报错，而且只在 release 包里这样，debug 测不出来。
+#
+#       两类都要留：'store.xxx' 认的是 VehicleStore（导出类，还叠一层
+#       -enable-export-obfuscation）的属性，'xxx' 认的是组件自己的 @Param / @Local。
+#       后一类曾经漏过——static-check.mjs 原来只扫前一类。
+controller
+loginEpoch
+session
+pendingDeepLink
+toast
+challenge
+carModelRoot
+carLayerPlan
+# coordinate 不是 store 的：它是 LocationThumbnail 自己的 @Param，被那边的
+# @Monitor('coordinate') 按字面量认。store.coordinate 是个 getter，@Monitor 追不到，
+# 地图页已经改成监听 state 了。
+coordinate
+# state 有两个用处：地图页的 @Monitor('store.state')，以及 CarModel3DView 自己的
+# @Param state 被 @Monitor('state') 认。
+state
+# DailyMileageChart 的 @Param entries，被 @Monitor('entries') 认。漏了的话
+# release 包里里程折线图不随数据刷新。
+entries
+
+# ── 9. 蓝牙钥匙的绑定记录与钥匙证书（BLEVehicleBinding 的三个 Record）。
+#        整份 JSON 存进 AssetVault，跨版本读回。改了名字，用户上个版本配好的绑定
+#        和证书会整份解不出来——症状是「缺少蓝牙证书」，只能重新同步一遍。
+certificateFingerprint
+configuration
+syncState
+removeAfterDisable
+lastVerifiedAt
+distanceCalibration
+coefficientHundredths
+unlockCalibration
+lockCalibration
+isEnabled
+autoLockEnabled
+autoUnlockEnabled
+supportsButton
+ecdhPublicKey
+keyType
+passwordCard
+plainText
+signResult
+
+# BLE 旧版距离标定持久化 / API 字段
+distanceSelection
+defaultUnlockCalibration
+officialParams
+autonomyParams
+manufactureDefaultParams
+globalDefaultParams
+
+multipleAnchors
+anchorPointParams
+multipleAnchorPointParams
+multipleAnchorAutonomyParams
+anchorType
+
+protocolMinor

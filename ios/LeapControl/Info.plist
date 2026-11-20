@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_CN</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh_CN</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>org.yipao.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>leapcontrol</string>
+			</array>
+		</dict>
+	</array>
+	<!-- 声明为"未使用需要出口许可的加密"。本 App 只用标准算法（AES/RSA/HMAC）
+	     完成与厂商接口的鉴权和本机密码保护，属于豁免范围。
+	     不写这一项的话，每次上传 TestFlight 都要在网页上手工回答一次这个问题。 -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- 长按桌面图标弹出来的快捷操作。系统在 App 没运行时也要画这个菜单，
+	     所以只能写死在这里，代码插不上手——菜单上因此看不到车况，车锁那条
+	     只能是「开关车锁」这样不表方向的文字（方向由 App 拉到实时车况后再定）。
+	     `Type` 后半段必须和 `WidgetAction` 的 rawValue 一致，见 QuickActions.swift。
+	     系统最多显示 4 条，这里用了 3 条，留一条以后用。 -->
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>org.yipao.app.action.toggleLock</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>开关车锁</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>car.side.lock.fill</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>org.yipao.app.action.horn</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>鸣笛寻车</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>speaker.wave.2.fill</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>org.yipao.app.action.trunk</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>开关尾门</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>car.side.rear.open</string>
+		</dict>
+	</array>
+	<!-- 控车过程那条灵动岛（ControlActivityWidget）。这一项写在**主 App** 的 plist 里，
+	     扩展那份不需要；缺了它 Activity.request 会直接抛 unsupportedTarget，
+	     而扩展进程里那个错没有任何出口，表现就是"按了没有灵动岛"。 -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>使用 Face ID 快速验证控车指令，替代每次输入操作密码。</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>用于发现并连接你已授权的车辆，实现蓝牙控车和无感解锁。</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>用于在地图上显示你和车辆的位置，并在靠近车辆时恢复蓝牙连接。</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>用于在锁屏或后台时监测车辆 Beacon 区域并恢复蓝牙连接，实现无感解锁。</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>iosamap</string>
+		<string>baidumap</string>
+		<string>qqmap</string>
+	</array>
+</dict>
+</plist>

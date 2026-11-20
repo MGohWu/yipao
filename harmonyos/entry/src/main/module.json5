@@ -1,0 +1,140 @@
+{
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "EntryAbility",
+    "querySchemes": [
+      // 「导航到车辆」那张选择卡要先问一句「这台手机上装了哪些地图」，
+      // `bundleManager.canOpenLink` 只认这里列过的 scheme——没列的直接抛 17700056，
+      // 不是返回 false。列了也只是能查询，不代表能拉起。
+      "amapuri",
+      "baidumap",
+      "qqmap"
+    ],
+    "deviceTypes": [
+      "phone"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    // 华为地图（MapComponent 和静态图）靠这个值鉴权。开源版留空，编译者自己填
+    // （见 README）；留空时地图相关界面会降级成灰底占位，其余功能不受影响。
+    //
+    // 取的是 AGC 里这个应用的 Client ID。它必须和签名 profile 里的 app-identifier
+    // 指向同一个应用——鉴权除了认这个值，还要认包是不是用那个应用的证书签的。
+    // 两边对不上就一路 App authentication failed，服务开了也没用。
+    // 值只能写字面量，不能用 $string: 之类的资源引用，系统解析不了。
+    "metadata": [
+      {
+        "name": "client_id",
+        "value": ""
+      }
+    ],
+    "abilities": [
+      {
+        "name": "EntryAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ets",
+        "description": "$string:ability_desc",
+        "icon": "$media:layered_image",
+        "label": "$string:ability_label",
+        "startWindowIcon": "$media:startIcon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": true,
+        "orientation": "portrait",
+        // 「无感解锁」开着时申请的长时任务类型。不在这里声明，
+        // startBackgroundRunning 会直接报 9800005（长时任务校验失败）。
+        "backgroundModes": ["bluetoothInteraction"],
+        // 长按桌面图标弹出的快捷方式。静态配置，系统最多认 4 条，现在用了 3 条。
+        //
+        // 每条只做一件事：把 EntryAbility 拉起来、把 `leapAction` 捎进 want.parameters。
+        // 指令本身照旧走 App 里那条完整链路（`handleDeepLink` → `pendingAction` →
+        // `consumePendingWidgetAction`，含生物识别和操作密码），和卡片按钮共用一套。
+        //
+        // **快捷方式发不了后台指令**：系统规定它只能拉起 UIAbility，没有卡片那种
+        // 「App 不露面就把指令发出去」的路子。所以这里不做「直接控车」那道分流，
+        // 点了一定会看到 App 打开。
+        "metadata": [
+          {
+            "name": "ohos.ability.shortcuts",
+            "resource": "$profile:shortcuts_config"
+          }
+        ],
+        "skills": [
+          {
+            "entities": ["entity.system.home"],
+            "actions": ["ohos.want.action.home"]
+          }
+        ]
+      }
+    ],
+    "extensionAbilities": [
+      {
+        "name": "LeapFormAbility",
+        "srcEntry": "./ets/formability/LeapFormAbility.ets",
+        "label": "$string:form_ability_label",
+        "description": "$string:form_ability_desc",
+        "type": "form",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:form_config"
+          }
+        ]
+      }
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      },
+      {
+        // 控车前用人脸/指纹取出已保存的操作密码。不声明它，userAuth.getAvailableStatus
+        // 会直接抛 Permission denied（1005），BiometricGate 把异常一律当成「本机不支持」，
+        // 设置页就一直显示「生物识别不可用」——机器明明是支持的。
+        // 系统授予，不弹窗。
+        "name": "ohos.permission.ACCESS_BIOMETRIC"
+      },
+      {
+        // 蓝牙钥匙：扫描、连接、读写 GATT 都要它。用户授权，首次进蓝牙钥匙页时弹窗。
+        "name": "ohos.permission.ACCESS_BLUETOOTH",
+        "reason": "$string:reason_bluetooth",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
+      },
+      {
+        // 车辆广播的是随机设备地址。登记后系统才会在地址轮换时继续把它映射到同一台车。
+        // 这是 system_basic 级受限权限：签名 Profile 里必须带这条 ACL，否则安装报 9568289
+        // （见 README）。
+        "name": "ohos.permission.PERSISTENT_BLUETOOTH_PEERS_MAC"
+      },
+      {
+        // 车辆位置页那个蓝点和「离车还有多远」。只要前台这一次：这一页进来取一次位置，
+        // 不订阅、不申请「始终」——人不在这一页就没有任何定位行为。
+        // 两条一起申请：只给 APPROXIMATELY 也够算距离，所以有一条通过就往下走。
+        "name": "ohos.permission.APPROXIMATELY_LOCATION",
+        "reason": "$string:reason_location",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.LOCATION",
+        "reason": "$string:reason_location",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
+      },
+      {
+        // 「无感解锁」打开后才申请的长时任务（BLUETOOTH_INTERACTION）。
+        // 进程被回收就没有常连，也就没有无感——所以这条权限和那个开关是一体的，
+        // 开关默认关，不开就不会起长时任务、也不会有常驻通知。
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
+      }
+    ]
+  }
+}

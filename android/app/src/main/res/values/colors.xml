@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用图标底色。和 iOS 的 AppIcon 取同一个值（那张 1024 图的底就是 #161616），
+         三端图标看着才是同一个 App。 -->
+    <color name="ic_launcher_background">#161616</color>
+
+    <!-- 启动屏的外围底色。中间那块品牌图（`ic_splash_brand`）四边就收在这个色上，
+         接缝才看不出来——改这里必须连图一起重画，见 `themes.xml` 的说明。
+         iOS 那边压根没有启动图（`UILaunchScreen_Generation`，只有一张纯背景）。 -->
+    <color name="splash_background">#DFECEC</color>
+
+    <!-- 锁车卡那层随状态变色的卡底。Glance 画不了渐变（没有 Brush），
+         只能做成 drawable 从这里取色；明暗两套靠 values-night 覆盖。
+         和 `WidgetPalette` 里那几个 ColorProvider 同源，改一处要记得改另一处。
+         透明度照抄 iOS `LockWidgetBackground`：顶 0.18、底 0.05。 -->
+    <color name="widget_card_bg">#FFFBFCFF</color>
+    <color name="widget_native_primary">#FF11161F</color>
+    <color name="widget_native_secondary">#9911161F</color>
+    <color name="widget_native_track">#1A11161F</color>
+    <color name="widget_native_energy">#FF08703D</color>
+
+    <color name="widget_lock_locked_top">#2E08703D</color>
+    <color name="widget_lock_locked_bottom">#0D08703D</color>
+    <color name="widget_lock_unlocked_top">#2E9E5C00</color>
+    <color name="widget_lock_unlocked_bottom">#0D9E5C00</color>
+    <color name="widget_lock_unknown_top">#2E8A8A8A</color>
+    <color name="widget_lock_unknown_bottom">#0D8A8A8A</color>
+</resources>

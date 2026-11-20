@@ -1,0 +1,103 @@
+name: LeapControl
+options:
+  bundleIdPrefix: org.yipao
+  deploymentTarget:
+    iOS: "18.2"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    # 这两项会生成 CFBundleShortVersionString / CFBundleVersion。
+    # 缺了它们，App 扩展安装时会报 "Invalid placeholder attributes"。
+    MARKETING_VERSION: "1.1"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    # 填你自己的 Apple Team ID（10 位），见 README「签名」。
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+targets:
+  LeapControl:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.2"
+    sources:
+      - path: LeapControl
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.yipao.app
+        PRODUCT_NAME: LeapControl
+        INFOPLIST_FILE: LeapControl/Info.plist
+        # 让 Xcode 把 CFBundleIdentifier 等标准键合并进上面这份手写 plist。
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 壹跑
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_ENTITLEMENTS: LeapControl/LeapControl.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: LeapControl/Core/GMCrypto/LeapGMCrypto.h
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    dependencies:
+      - target: LeapWidget
+        embed: true
+      - framework: Vendor/GmSSL/GmSSL.xcframework
+        embed: false
+      - sdk: Security.framework
+
+  LeapWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.2"
+    sources:
+      - path: LeapWidget
+      # 快照结构和品牌色两边共用一份，避免慢慢跑偏。
+      - path: LeapControl/Shared
+      # 卡片按钮要直接下发控车指令，需要同一套鉴权与签名实现。
+      - path: LeapControl/Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.yipao.app.widget
+        PRODUCT_NAME: LeapWidget
+        INFOPLIST_FILE: LeapWidget/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 壹跑
+        CODE_SIGN_ENTITLEMENTS: LeapWidget/LeapWidget.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: LeapControl/Core/GMCrypto/LeapGMCrypto.h
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - framework: Vendor/GmSSL/GmSSL.xcframework
+        embed: false
+      - sdk: Security.framework
+
+  LeapControlTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.2"
+    sources:
+      - path: LeapControlTests
+    dependencies:
+      - target: LeapControl
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.yipao.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+# 显式声明 scheme，xcodegen 会把它写进 xcshareddata/xcschemes（shared）。
+schemes:
+  LeapControl:
+    build:
+      targets:
+        LeapControl: all
+    test:
+      config: Debug
+      targets:
+        - LeapControlTests
+    archive:
+      config: Release

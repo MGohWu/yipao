@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 油量条前面那个小标。
+     iOS 那边是 SF Symbols 的 `fuelpump.fill`，安卓这边画成油滴：
+     能量条只有 9dp 宽，一把油枪缩到这个尺寸后枪管和罐体糊成一团，认不出是什么；
+     油滴在这个尺寸下轮廓仍然完整，和旁边那道闪电也一眼分得开。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2.5c0,0 -6.5,7.6 -6.5,11.5a6.5,6.5 0 1,0 13,0c0,-3.9 -6.5,-11.5 -6.5,-11.5z" />
+</vector>

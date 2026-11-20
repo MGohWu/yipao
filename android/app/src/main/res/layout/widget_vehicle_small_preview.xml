@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 车况小卡（2×2）在选择器里的静态预览。数字是示意值，不是真车况——用户添加之后
+     Glance 立刻会用真实快照重画。
+
+     照着 `SmallLayout` 真实的样子画：车名+刷新键 / 大数字+能量条 / 两颗带文字的按钮。
+     预览和真卡长得不一样的话，用户是照着预览决定要不要添加的，添完发现是另一张卡。
+
+     **只能用 RemoteViews 白名单里的 View 类型**：这张布局是被当作 RemoteViews
+     inflate 的，`<View>` 和 `<Space>` 都不在白名单里，写了就整张预览变成
+     「无法加载微件」——而且 Launcher 拿不到 previewLayout 时会连 targetCellWidth
+     一起忽略，退回按 minWidth 算格数，落地尺寸也跟着不对。
+     纯占位和纯色块一律用 ImageView 顶。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_preview_bg"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/widget_preview_vehicle"
+            android:textColor="#99F2F5FA"
+            android:maxLines="1"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="bottom">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_preview_soc"
+            android:textColor="#FFF2F5FA"
+            android:maxLines="1"
+            android:textSize="34sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginBottom="4dp"
+            android:text="@string/widget_preview_percent"
+            android:textColor="#99F2F5FA"
+            android:maxLines="1"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:text="@string/widget_preview_range"
+            android:textColor="#99F2F5FA"
+            android:maxLines="1"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- 能量条。预览里不需要真进度，两段 weight 摆出 76% 的样子就够。 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="5dp"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:background="@drawable/widget_preview_bar_track">
+
+        <ImageView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="76"
+            android:contentDescription="@null"
+            android:background="@drawable/widget_preview_bar_fill" />
+
+        <ImageView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="24"
+            android:contentDescription="@null" />
+    </LinearLayout>
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:contentDescription="@null" />
+
+    <!-- 小卡只放两颗最常用的按钮，和真卡一致。 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/widget_preview_tile_accent">
+
+            <ImageView
+                android:layout_width="17dp"
+                android:layout_height="17dp"
+                android:src="@drawable/ic_widget_lock"
+                android:contentDescription="@null"
+                android:tint="#FF4DC47D" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/widget_preview_lock"
+                android:textColor="#FF4DC47D"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <ImageView
+            android:layout_width="7dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@null" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/widget_preview_tile_cool">
+
+            <ImageView
+                android:layout_width="17dp"
+                android:layout_height="17dp"
+                android:src="@drawable/ic_widget_climate"
+                android:contentDescription="@null"
+                android:tint="#99F2F5FA" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/widget_preview_climate"
+                android:textColor="#99F2F5FA"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

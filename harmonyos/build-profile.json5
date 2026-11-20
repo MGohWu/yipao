@@ -1,0 +1,46 @@
+{
+  "app": {
+    // 开源版不带任何签名材料。编译者在 DevEco Studio 里用
+    // File → Project Structure → Signing Configs →「Automatically generate signature」
+    // 自动生成调试签名，生成结果会写回这里（证书路径、加密后的密码、profile）——
+    // 那些是个人材料，别提交回仓库。不签名也能编出 unsigned HAP，只是装不上真机。
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "6.1.0(23)",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "string": [
+    { "name": "reason_location", "value": "显示你的位置并计算到车辆的距离" },
+    { "name": "reason_bluetooth", "value": "连接车辆蓝牙以实现蓝牙钥匙解闭锁" },
+    { "name": "module_desc", "value": "壹跑主模块" },
+    { "name": "ability_desc", "value": "壹跑" },
+    { "name": "ability_label", "value": "壹跑" },
+    { "name": "form_ability_desc", "value": "车辆状态服务卡片" },
+    { "name": "form_ability_label", "value": "车辆状态" },
+    { "name": "card_small_name", "value": "车辆状态" },
+    { "name": "card_small_desc", "value": "电量、续航与车锁，一眼可见。" },
+    { "name": "card_medium_name", "value": "车辆状态与控车" },
+    { "name": "card_medium_desc", "value": "电量续航加四个常用控车动作。" },
+    { "name": "card_large_name", "value": "车辆状态与位置" },
+    { "name": "card_large_desc", "value": "电量、停车位置与四个常用控车动作。" },
+    { "name": "card_lock_name", "value": "车锁开关" },
+    { "name": "card_lock_desc", "value": "车辆模型与锁车状态，点击卡片执行标题所示操作。" },
+    { "name": "card_lock_only_name", "value": "上锁车辆" },
+    { "name": "card_lock_only_desc", "value": "车辆模型与锁车状态，点击卡片上锁车辆。" },
+    { "name": "card_unlock_name", "value": "解锁车辆" },
+    { "name": "card_unlock_desc", "value": "车辆模型与锁车状态，点击卡片解锁车辆。" },
+    { "name": "shortcut_lock", "value": "开关车锁" },
+    { "name": "shortcut_horn", "value": "鸣笛寻车" },
+    { "name": "shortcut_trunk", "value": "开关尾门" }
+  ]
+}

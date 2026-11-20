@@ -1,0 +1,17 @@
+# Xcode 工程由 project.yml 通过 xcodegen 生成，不入库——
+# 入库只会在每次 xcodegen generate 后产生大段无意义 diff，还会带上本机路径。
+LeapControl.xcodeproj/
+
+# Xcode / macOS
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+ExportOptions.plist
+
+# 打包产物
+*.xcarchive
+

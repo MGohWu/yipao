@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">壹跑</string>
+
+    <!-- 小组件选择器里的条目名。四张卡都得有自己的名字：不写的话系统一律显示应用名，
+         选择器里会并排出现四个「壹跑」，谁也分不出哪张是哪张。 -->
+    <string name="widget_vehicle_small_label">车况 · 小</string>
+    <string name="widget_vehicle_medium_label">车况 · 中</string>
+    <string name="widget_vehicle_large_label">车况 · 大</string>
+    <string name="widget_lock_label">车锁开关</string>
+    <string name="widget_lock_only_label">上锁车辆</string>
+    <string name="widget_unlock_label">解锁车辆</string>
+    <string name="widget_lock_only_description">车辆模型与锁车状态，点击卡片上锁车辆</string>
+    <string name="widget_unlock_description">车辆模型与锁车状态，点击卡片解锁车辆</string>
+
+    <!-- 选择器里的说明。系统只给一行，所以每张卡只说清楚它比别的多什么。 -->
+    <string name="widget_vehicle_small_description">电量与续航，两个自选控车按钮</string>
+    <string name="widget_vehicle_medium_description">电量、续航与车况一眼可见，四颗键直接控车</string>
+    <string name="widget_vehicle_large_description">车况全貌加一张车模，四颗键直接控车</string>
+    <string name="widget_lock_description">车辆模型与锁车状态，点击卡片执行标题所示操作</string>
+
+    <!-- 预览图上的示意文案。 -->
+    <string name="widget_preview_vehicle">C11</string>
+    <!-- 大数字和它后面那个小一号的「%」是分开摆的，和真卡一样（见 `SocRow`）。 -->
+    <string name="widget_preview_soc">76</string>
+    <string name="widget_preview_percent">%</string>
+    <string name="widget_preview_status">已锁车 · 刚刚更新</string>
+    <string name="widget_preview_range">312 km</string>
+    <string name="widget_preview_lock">车锁</string>
+    <string name="widget_preview_climate">空调</string>
+    <string name="widget_preview_trunk">尾门</string>
+    <string name="widget_preview_horn">鸣笛</string>
+</resources>

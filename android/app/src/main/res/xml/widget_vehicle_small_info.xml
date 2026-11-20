@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    车况小卡：2×2，对齐 iOS 小尺寸。
+
+    **为什么回到 2×2。** 上一版按这台 AOSP 模拟器量出来的栅格（一列约 72dp、
+    一行约 130dp）把高度压成 1 格，图的是「落地是个方卡」。但国产桌面
+    （MIUI / ColorOS / OriginOS / 鸿蒙安卓版）根本不是这么摆的：它们只认自己那套
+    标准槽位（1×1 / 2×2 / 4×2 / 4×4），declare 一个 2×1 出来的结果是被就近吸到 2×2，
+    而卡片内容还是照 1 格的高度排的——底下空一大片。2×2 / 4×2 / 4×4 是国产桌面上
+    唯一到处都认得的三档，照这三档报，落地尺寸才和声明的一致。
+
+    **不可拉伸**（`resizeMode="none"`）。三种尺寸各注册一个 provider，选哪张就是哪张，
+    和 iOS 一样——放开拉伸的话一张卡能被拖出四种样子，车主拖一下就不认识了。
+
+    **minWidth/minHeight 和 targetCell* 必须一起写。** 只写 targetCell* 的话，
+    AOSP Launcher3 仍然照旧公式 `(min + 30) / 70` 算格数，而不少国产桌面压根不读
+    targetCell*（那是 API 31 才有的属性）——只有旧公式那两个值是哪儿都认的。
+    110dp 是 2 格的公式值。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_vehicle_small_description"
+    android:previewLayout="@layout/widget_vehicle_small_preview"
+    android:initialLayout="@layout/widget_vehicle_small"
+    android:updatePeriodMillis="1800000" />

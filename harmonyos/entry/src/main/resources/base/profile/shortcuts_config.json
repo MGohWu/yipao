@@ -1,0 +1,49 @@
+{
+  "shortcuts": [
+    {
+      "shortcutId": "leap_toggle_lock",
+      "label": "$string:shortcut_lock",
+      "icon": "$media:ic_shortcut_lock",
+      "wants": [
+        {
+          "bundleName": "org.yipao.app",
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": {
+            "leapAction": "toggleLock"
+          }
+        }
+      ]
+    },
+    {
+      "shortcutId": "leap_horn",
+      "label": "$string:shortcut_horn",
+      "icon": "$media:ic_shortcut_horn",
+      "wants": [
+        {
+          "bundleName": "org.yipao.app",
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": {
+            "leapAction": "horn"
+          }
+        }
+      ]
+    },
+    {
+      "shortcutId": "leap_trunk",
+      "label": "$string:shortcut_trunk",
+      "icon": "$media:ic_shortcut_trunk",
+      "wants": [
+        {
+          "bundleName": "org.yipao.app",
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": {
+            "leapAction": "trunk"
+          }
+        }
+      ]
+    }
+  ]
+}

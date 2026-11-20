@@ -1,0 +1,81 @@
+[versions]
+agp = "9.1.0"
+kotlin = "2.2.10"
+coreKtx = "1.17.0"
+activityCompose = "1.12.2"
+composeBom = "2026.06.01"
+# Material 3 Expressive（MaterialExpressiveTheme、MotionScheme 等）从 1.4.0 起进入正式版，
+# BOM 里的版本落后于它，这里显式钉住。
+material3 = "1.4.0"
+# 毛玻璃背景模糊。官方 Compose 只有糊自身的 Modifier.blur，透背景得靠它；
+# API 30 及以下自动降级为半透明纯色。
+haze = "1.7.2"
+# 液态玻璃（折射+边缘高光），仿 iOS 26 Liquid Glass；lens 折射要 API 33+，
+# 低版本在代码里回落 haze。
+backdrop = "2.0.0"
+# backdrop 的形状库（Capsule 等），backdrop 只把它带到 runtime，编译期要用得显式声明。
+shapes = "1.2.0"
+# 二级页导航。字符串路由就够用（带参数的页面都拆成了独立路由），不上 serialization。
+navigationCompose = "2.9.0"
+# 高德地图。不引导航版：官方 App 用的 navi 版光一个 so 单架构就 39MB，我们不做导航。
+#
+# 用的是「地图+定位+搜索」合包而不是单独的 3dmap：高德从 10.0.600 之后就不再单独发
+# 3dmap 了（Maven 上那个坐标停在 2024 年），新版本只出这个合包。必须跟上新版的原因是
+# 16 KB 页对齐——Google Play 对新应用有强制要求，而 10.0.600 的 so 是 4 KB 对齐的，
+# 高德到 11.2.000 才把 GooglePlay 版合进主干。定位和搜索我们一个都不调，
+# 好在它俩既不往 Manifest 里塞权限也不注册组件（已核对合并后的 Manifest），
+# 代价只有 arm64 的 so 从 20MB 涨到 25MB。
+amap = "11.2.100_loc11.2.100_sea9.8.1"
+# HTTP 客户端。不用 Retrofit：零跑两条链路的签名要在请求组装的最后一步按最终参数算，
+# 注解式声明反而绕，直接用 OkHttp 的 Request 更贴近 iOS/鸿蒙那两份实现。
+okhttp = "5.2.1"
+# 协程。Compose 已经传递依赖进来了，这里显式钉住版本，免得 BOM 一升就漂。
+coroutines = "1.10.2"
+# lifecycle-runtime-compose：collectAsStateWithLifecycle，让轮询在后台自动停。
+lifecycleRuntimeCompose = "2.9.4"
+# 国密。安卓平台自带的 Conscrypt 不给 SM2/SM3/SM4，蓝牙钥匙的 keyType=1 路径只能靠它；
+# keyType=0 的 P-256 ECDH 用平台 JCA 就够，但两条路径共用一套 KDF 代码，统一走 BC 省事。
+# 用 jdk18on（Java 8+ 兼容版），安卓上不要用 jdk15to18 那份。
+bouncycastle = "1.82"
+# 桌面小组件。用 Glance 而不是 RemoteViews：小组件是 Compose 写法，主题色、能量条这些
+# 能和 App 内共用同一套心智，不用为一张卡再养一套 XML 布局。1.2.0 只发到 rc01 没转正，
+# 钉在 1.1.1 这个稳定版。
+glance = "1.1.1"
+# 后台定期拉车况。系统那个 updatePeriodMillis 只让卡片拿本地快照重画、不联网，
+# 卡片自己也不能在渲染里发网络请求，只有 WorkManager 这条路能在后台联网。
+# 周期下限就是 15 分钟，比这更勤系统会直接按 15 分钟执行。
+workManager = "2.10.0"
+# 单元测试。协议帧和国密那两块是纯 JVM 逻辑，不碰安卓 API，用本地单测就够，
+# 不上 Robolectric、也不需要模拟器。
+junit = "4.13.2"
+# org.json 在单测里只有个会抛 "not mocked" 的桩，JsonValue 依赖它解析，得换成真实现。
+json = "20250517"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+androidx-compose-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
+haze-materials = { group = "dev.chrisbanes.haze", name = "haze-materials", version.ref = "haze" }
+backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
+shapes = { group = "io.github.kyant0", name = "shapes", version.ref = "shapes" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+amap-map3d = { group = "com.amap.api", name = "3dmap-location-search", version.ref = "amap" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeCompose" }
+bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+json = { group = "org.json", name = "json", version.ref = "json" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

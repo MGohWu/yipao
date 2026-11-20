@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  资源压缩白名单。高德在优化版资源压缩 + final R id 下可能被误删其运行期资源
+  （离线地图对话框、下载进度条布局等），显式护住所有 amap_ 前缀资源。
+  shrinkMode=safe：对无法静态确定引用的资源保守保留（默认即 safe，这里写明意图）。
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:shrinkMode="safe"
+    tools:keep="@drawable/amap_*,@layout/amap_*,@style/amap_*,@styleable/amap_*,@string/amap_*,@color/amap_*,@dimen/amap_*,@id/amap_*,@array/amap_*,@attr/amap_*,@mipmap/amap_*,@raw/amap_*" />

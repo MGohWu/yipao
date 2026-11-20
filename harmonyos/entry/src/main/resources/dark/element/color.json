@@ -1,0 +1,44 @@
+{
+  "color": [
+    { "name": "start_window_background", "value": "#121824" },
+
+    { "name": "leap_accent", "value": "#5FCE8C" },
+    { "name": "leap_cool", "value": "#7DB4FF" },
+    { "name": "leap_warm", "value": "#FF9A6B" },
+    { "name": "leap_caution", "value": "#FFD189" },
+    { "name": "leap_frost", "value": "#6BE0EB" },
+
+    { "name": "leap_muted_fill", "value": "#9EFFFFFF" },
+    { "name": "leap_selected_fill", "value": "#24FFFFFF" },
+    { "name": "leap_vehicle_silhouette", "value": "#ECECF1" },
+    { "name": "leap_glass_edge", "value": "#29FFFFFF" },
+    { "name": "leap_glass_tint", "value": "#80000000" },
+    { "name": "leap_panel_tint", "value": "#E6161C28" },
+
+    { "name": "leap_bg_top", "value": "#1B2230" },
+    { "name": "leap_bg_mid", "value": "#121824" },
+    { "name": "leap_bg_bottom", "value": "#0A0E16" },
+
+    { "name": "leap_text_primary", "value": "#F2FFFFFF" },
+    { "name": "leap_text_secondary", "value": "#C7FFFFFF" },
+    { "name": "leap_text_tertiary", "value": "#9EFFFFFF" },
+    { "name": "leap_text_disabled", "value": "#96FFFFFF" },
+    { "name": "leap_fill_disabled", "value": "#646D76" },
+    { "name": "leap_tab_off", "value": "#B3FFFFFF" },
+
+    { "name": "leap_fill_accent", "value": "#1A4DC47D" },
+    { "name": "leap_fill_cool", "value": "#146BA8FF" },
+    { "name": "leap_fill_neutral", "value": "#0AFFFFFF" },
+    { "name": "leap_chart_bar", "value": "#6BA8FF" },
+    { "name": "leap_accent_soft", "value": "#8FE0B0" },
+    { "name": "leap_on_accent", "value": "#103A24" },
+
+    { "name": "leap_separator", "value": "#1FFFFFFF" },
+    { "name": "leap_card_tile_accent", "value": "#335FCE8C" },
+    { "name": "leap_card_tile_caution", "value": "#33FFD189" },
+    { "name": "leap_card_tile_cool", "value": "#337DB4FF" },
+    { "name": "leap_card_tile_soft", "value": "#1AFFFFFF" },
+    { "name": "leap_card_track", "value": "#33FFFFFF" },
+    { "name": "leap_card_bg", "value": "#FF161C28" }
+  ]
+}

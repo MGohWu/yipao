@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    车况中卡：4×2，对齐 iOS 中尺寸——左信息栏 + 右 2×2 按钮网格。
+
+    4×2 是国产桌面上最标准的那一档「横卡」，也是这张版式唯一摆得开的形状：
+    右边那块按钮网格照 iOS 占内容宽的一半（146/299），剩下一半给左栏，
+    4 格宽才够两边都不挤。
+
+    不可拉伸、min* 与 targetCell* 一起写，两条的道理见 `widget_vehicle_small_info.xml`。
+    250dp 是 4 格的公式值，110dp 是 2 格。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_vehicle_medium_description"
+    android:previewLayout="@layout/widget_vehicle_medium_preview"
+    android:initialLayout="@layout/widget_vehicle_medium"
+    android:updatePeriodMillis="1800000" />

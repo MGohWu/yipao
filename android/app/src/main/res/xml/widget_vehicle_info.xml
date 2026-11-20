@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    车况大卡：4×4，对齐 iOS 大尺寸——头部 + 车模主视觉 + 读数 + 四颗键横排。
+
+    这一版式的主角是中间那张车图，它要有整整一块地方才立得住；4×2 摆下来
+    车图只剩九十来 dp 高，一台车压成一条。4×4 是国产桌面上的「大卡」标准档。
+
+    这个文件仍叫 `widget_vehicle_info`、对应的 provider 仍叫 `VehicleWidgetReceiver`，
+    是为了不动老实例：上一版只有这一个 provider，换名字的话已经摆在桌面上的卡
+    会在升级后直接消失。
+
+    不可拉伸、min* 与 targetCell* 一起写，两条的道理见 `widget_vehicle_small_info.xml`。
+    250dp 是 4 格的公式值。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="250dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="4"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_vehicle_large_description"
+    android:previewLayout="@layout/widget_vehicle_large_preview"
+    android:initialLayout="@layout/widget_vehicle_large"
+    android:updatePeriodMillis="1800000" />

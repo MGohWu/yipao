@@ -1,0 +1,16 @@
+.gradle/
+build/
+local.properties
+.idea/
+.kotlin/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 正式签名凭据，绝不入库
+keystore.properties
+*.jks
+*.keystore
+

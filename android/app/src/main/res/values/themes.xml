@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 只是启动壳，进入 Compose 后由 LeapTheme 接管。 -->
+    <style name="Theme.LeapControl" parent="android:Theme.Material.NoActionBar">
+        <!-- 三个都要给：`windowBackground` 管启动屏化开之后到首屏画出来之间那一帧，
+             另外两个才是 Android 12 起的启动屏本身。原先这里是纯黑，浅色模式下
+             开 App 会先黑一下再跳到浅色首页。
+
+             品牌那一摞（标志 / 壹跑 / 那句话）连同中间那片绿光都画在
+             `ic_splash_brand` 里：系统这一屏只肯给「纯色底 + 正中一块 192dp
+             见方的图」，铺不了全屏渐变，也排不下别的位置。图的四边收干净成
+             `splash_background` 同色，接缝看不出来。 -->
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_brand</item>
+    </style>
+</resources>

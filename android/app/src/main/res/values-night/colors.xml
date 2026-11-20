@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色下的启动屏外围底色，取 `AmbientDark` 那一档的深蓝墨。
+         同样和 `drawable-night-nodpi/ic_splash_brand.png` 的四边严格同色。 -->
+    <color name="splash_background">#121824</color>
+
+    <!-- 深色下的锁车卡卡底。品牌色换成提亮的那一档（`LeapGreenDark` 等），
+         叠加透明度不变——桌面壁纸多半是深的，纯黑卡会糊在一起。 -->
+    <color name="widget_card_bg">#FF1B2130</color>
+    <color name="widget_native_primary">#FFF2F5FA</color>
+    <color name="widget_native_secondary">#99F2F5FA</color>
+    <color name="widget_native_track">#24FFFFFF</color>
+    <color name="widget_native_energy">#FF4DC47D</color>
+
+    <color name="widget_lock_locked_top">#2E4DC47D</color>
+    <color name="widget_lock_locked_bottom">#0D4DC47D</color>
+    <color name="widget_lock_unlocked_top">#2EFFD18A</color>
+    <color name="widget_lock_unlocked_bottom">#0DFFD18A</color>
+    <color name="widget_lock_unknown_top">#2EB0B6C2</color>
+    <color name="widget_lock_unknown_bottom">#0DB0B6C2</color>
+</resources>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    一键锁车卡：2×2，和车况小卡同一个形状，对齐 iOS 那张只有小尺寸的锁车卡。
+
+    尺寸这一档的道理见 `widget_vehicle_small_info.xml`：国产桌面只认
+    2×2 / 4×2 / 4×4 那几个标准槽位，报 2×1 会被就近吸到 2×2。
+
+    **不可拉伸**：这张卡整个就是一个锁车按钮，拉大只会放大误触面积，
+    而误触的代价是车门开了。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_lock_description"
+    android:previewLayout="@layout/widget_lock_preview"
+    android:initialLayout="@layout/widget_lock_native"
+    android:updatePeriodMillis="1800000" />

@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 定位只为车辆位置页那两格「直线距离 / 驾车距离」——要算距离就得先知道手机在哪。
+         两个都声明是安卓 12 起的规矩：只声明 FINE 的话，系统弹窗里那个「大致位置 /
+         精确位置」的二选一开关不会出现，用户被迫给精确位置。声明了 COARSE 才有得选，
+         用户只给大致位置我们也照样能用——差几百米对「车离我多远」这种参考值无所谓。
+         没有 BACKGROUND_LOCATION：只在这一页开着的时候要一次，退出就不要了。 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- 蓝牙钥匙。安卓 12 起扫描和连接是两个独立权限，各要各的。
+         neverForLocation 是明确告诉系统「我们不拿蓝牙广播反推位置」，
+         带上它系统就不会因为扫描而顺手要定位权限——上面那两个定位权限只服务地图页。
+         BLE 整体只在 12 及以上开放（minSdk 已经是 31），所以没有 maxSdkVersion 的老权限。 -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- 无感钥匙的后台常驻。安卓不会替普通进程守着 GATT 连接，App 一被回收，走近车辆
+         自动解锁就失效了；要做到 iOS 那种「装了就一直在」，只有前台服务这一条路。
+         connectedDevice 是这类服务的法定类型（安卓 14 起必须声明具体类型，且各类型
+         各要一条权限），它本身不额外获取任何数据，能力仍然只来自上面那两条蓝牙权限。
+         代价是一条撤不掉的常驻通知——只在真的绑定了车之后才起。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- 安卓 13 起通知要用户点头。不给也不影响无感钥匙工作（服务照跑，只是那条状态
+         通知不显示），所以只在用户打开蓝牙控车时问一次，被拒就不再打扰。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 用指纹/人脸代替每次手输操作密码。安装即授予，不用运行时申请，但**不声明就崩**：
+         `BiometricManager.canAuthenticate` 少了这条会抛 SecurityException，而设置页一进去
+         就要问「这台设备有没有生物识别」——漏了它整个设置页打不开。 -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- 没有蓝牙的设备装了也只是这一个功能不可用，不该整机不给装。 -->
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
+
+    <!-- Android 11 起装了什么 App 默认不可见。这里只问这三家地图在不在——
+         「导航到车辆」的菜单只列真装了的，没装的不该出现在选项里。 -->
+    <queries>
+        <package android:name="com.autonavi.minimap" />
+        <package android:name="com.baidu.BaiduMap" />
+        <package android:name="com.tencent.map" />
+    </queries>
+
+    <application
+        android:name=".LeapApplication"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LeapControl">
+        <!-- singleTop：小组件、磁贴、通知按钮都可能在 App 已经开着的时候把它再拉一次。
+             默认的 standard 会新建一个实例，用户按返回时要退两层才出得去。
+
+             screenOrientation=portrait：全 App 只画了竖版，和 iOS
+             （`INFOPLIST_KEY_UISupportedInterfaceOrientations = ...Portrait`）、
+             鸿蒙（module.json5 里的 `"orientation": "portrait"`）钉的是同一档。
+             用 portrait 而不是 userPortrait，是因为 iOS 那边也没放开 180° 倒置。
+
+             注意这条**只在手机上算数**：targetSdk 36（Android 16）起，系统在大屏
+             （sw ≥ 600dp，平板和折叠屏内屏）上一律忽略方向限制，那是平台的强制行为。 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.LeapControl">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- leapcontrol:// 深链。不能直发指令的那些按钮跳这里，由 App 走完整验证再执行。
+                 和 iOS 用同一套 scheme，两端文档能对上。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="leapcontrol" />
+            </intent-filter>
+        </activity>
+
+        <!-- 桌面小组件。exported=false：只有系统的小组件宿主会发这些广播，
+             而它走的是 AppWidget 框架，不需要我们导出。
+
+             车况卡按尺寸拆成三个 provider（小/中/大），因为安卓没有 iOS 那种
+             「一张卡横滑挑尺寸」的机制——想让三种版式各自钉死、拖不变形，
+             就只能一种尺寸注册一个。选择器里因此是三个条目，各自有 label。 -->
+        <receiver
+            android:name=".widget.VehicleSmallWidgetReceiver"
+            android:label="@string/widget_vehicle_small_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_vehicle_small_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.VehicleMediumWidgetReceiver"
+            android:label="@string/widget_vehicle_medium_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_vehicle_medium_info" />
+        </receiver>
+
+        <!-- 大卡。名字不带 Large 是历史包袱：上一版只有这一个 provider，
+             改名会让已经摆在桌面上的卡在升级后消失。 -->
+        <receiver
+            android:name=".widget.VehicleWidgetReceiver"
+            android:label="@string/widget_vehicle_large_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_vehicle_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.LockWidgetReceiver"
+            android:label="@string/widget_lock_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_lock_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.LockOnlyWidgetReceiver"
+            android:label="@string/widget_lock_only_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_lock_only_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.UnlockWidgetReceiver"
+            android:label="@string/widget_unlock_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_unlock_info" />
+        </receiver>
+
+        <!-- 常驻通知上那两个控车按钮的落点。 -->
+        <receiver
+            android:name=".app.ControlNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.yipao.app.action.NOTIFICATION_CONTROL" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 桌面按钮使用应用自有的显式广播，避开部分桌面系统会丢失的 Glance callback session。 -->
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="false" />
+
+        <!-- 快捷设置磁贴。必须 exported=true 且带 BIND_QUICK_SETTINGS_TILE：
+             绑定方是系统 UI 进程，那条权限保证只有它绑得上。 -->
+        <service
+            android:name=".widget.LockTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_widget_lock"
+            android:label="壹跑车锁"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".widget.HornTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_widget_horn"
+            android:label="壹跑鸣笛"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- key 来自 local.properties，编译期注入，不进 git。 -->
+        <meta-data
+            android:name="com.amap.api.v2.apikey"
+            android:value="${AMAP_KEY}" />
+
+        <!-- 无感钥匙常驻。exported=false：只有本进程会起它。 -->
+        <service
+            android:name=".app.BLEKeyForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- 高德定位跑在这个 Service 里。依赖是 jar 不是 aar，没有清单可合并，
+             这行得自己写——不写的话 startLocation() 一声不吭永远不回调。 -->
+        <service android:name="com.amap.api.location.APSService" />
+    </application>
+
+</manifest>

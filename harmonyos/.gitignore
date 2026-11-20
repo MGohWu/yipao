@@ -1,0 +1,24 @@
+/node_modules
+/oh_modules
+/entry/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+**/.hvigor
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+/sign
+# DevEco 混淆助手每次跑都生成一份，不是源码
+**/Hm-recommend-keep-list.txt
+/obfuscation-helper-*.xlsx
+# release 构建时 ArkGuard 输出的名称映射，不进仓库
+/entry/obfuscation
+.DS_Store
+# 签名材料（证书、profile、私钥），不进仓库
+*.p12
+*.p7b
+*.cer
+*.csr

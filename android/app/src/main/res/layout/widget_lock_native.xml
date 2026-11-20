@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_lock_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_native_card_bg" android:orientation="vertical" android:padding="14dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView android:id="@+id/widget_lock_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:maxLines="1" android:textColor="@color/widget_native_primary" android:textSize="14sp" android:textStyle="bold" />
+            <TextView android:id="@+id/widget_lock_vehicle_name" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:maxLines="1" android:textColor="@color/widget_native_secondary" android:textSize="11sp" />
+        </LinearLayout>
+        <ImageView android:id="@+id/widget_lock_badge" android:layout_width="26dp" android:layout_height="26dp"
+            android:contentDescription="@null" android:scaleType="centerInside" />
+    </LinearLayout>
+    <ImageView android:id="@+id/widget_lock_car" android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_marginVertical="4dp" android:layout_weight="1" android:contentDescription="@null" android:scaleType="fitCenter" />
+    <TextView android:id="@+id/widget_lock_status" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:maxLines="1" android:textColor="@color/widget_native_primary" android:textSize="10sp" android:textStyle="bold" />
+</LinearLayout>

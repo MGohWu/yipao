@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_small_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_native_card_bg"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView android:id="@+id/widget_small_vehicle_name" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/widget_native_secondary"
+        android:textSize="12sp" android:textStyle="bold" />
+    <ImageView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:contentDescription="@null" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:gravity="bottom" android:orientation="horizontal">
+        <TextView android:id="@+id/widget_small_soc" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:maxLines="1" android:textColor="@color/widget_native_primary" android:textSize="34sp" />
+        <TextView android:id="@+id/widget_small_percent" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp" android:layout_weight="1" android:maxLines="1"
+            android:textColor="@color/widget_native_secondary" android:textSize="14sp" />
+        <TextView android:id="@+id/widget_small_range" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp" android:maxLines="1" android:textColor="@color/widget_native_secondary"
+            android:textSize="10sp" />
+    </LinearLayout>
+    <ProgressBar android:id="@+id/widget_small_energy" style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent" android:layout_height="5dp" android:layout_marginTop="4dp"
+        android:indeterminate="false" android:max="100" android:progressBackgroundTint="@color/widget_native_track"
+        android:progressTint="@color/widget_native_energy" />
+    <ImageView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:contentDescription="@null" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="50dp" android:orientation="horizontal">
+        <LinearLayout android:id="@+id/widget_small_action_0" android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:background="@drawable/widget_action_tile_bg" android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:id="@+id/widget_small_action_icon_0" android:layout_width="17dp" android:layout_height="17dp" android:contentDescription="@null" />
+            <TextView android:id="@+id/widget_small_action_title_0" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:maxLines="1" android:textSize="10sp" android:textStyle="bold" />
+        </LinearLayout>
+        <ImageView android:layout_width="7dp" android:layout_height="match_parent" android:contentDescription="@null" />
+        <LinearLayout android:id="@+id/widget_small_action_1" android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:background="@drawable/widget_action_tile_bg" android:gravity="center"
+            android:orientation="vertical">
+            <ImageView android:id="@+id/widget_small_action_icon_1" android:layout_width="17dp" android:layout_height="17dp" android:contentDescription="@null" />
+            <TextView android:id="@+id/widget_small_action_title_1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:maxLines="1" android:textSize="10sp" android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

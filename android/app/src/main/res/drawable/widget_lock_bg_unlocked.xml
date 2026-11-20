@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 锁车卡的卡底（unlocked）。对齐 iOS `LockWidgetBackground`：
+     一层卡底色 + 一层从上到下淡下去的状态色。刻意压得很淡——状态该由右上角那颗
+     徽标说，铺一层饱和色块会把车图整个染掉。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <solid android:color="@color/widget_card_bg" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/widget_lock_unlocked_top"
+                android:endColor="@color/widget_lock_unlocked_bottom"
+                android:type="linear" />
+        </shape>
+    </item>
+</layer-list>

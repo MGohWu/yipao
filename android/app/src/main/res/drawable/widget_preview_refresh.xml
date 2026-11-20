@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 预览图上那颗刷新键的底。对应 `WidgetPalette.button` 的深色那一档。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#1AFFFFFF" />
+</shape>
