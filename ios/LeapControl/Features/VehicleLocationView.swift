@@ -292,7 +292,7 @@ struct VehicleLocationView: View {
                 "\(mode.title) \(Int(route.distance.rounded()))m/\(Int(route.duration))s 来源=\(route.source.label)"
             )
         } else {
-            BLEDiagnostics.record("route", "路线算不出来（高德/苹果都没给） mode=\(mode)"
+            BLEDiagnostics.record("route", "路线算不出来（高德/苹果都没给） mode=\(mode)")
         }
     }
 
