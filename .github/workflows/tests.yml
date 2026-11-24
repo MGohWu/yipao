@@ -1,0 +1,97 @@
+# 跑单元测试。和出包那条流水线分开：出包要的是「能编过」，这条要的是「逻辑还对」。
+#
+# 为什么单独一条：`build-ipa.sh` 走的是 `xcodebuild archive`，只编 App 和小组件，
+# 测试 target 根本不参与——测试里的语法错误、断言错误在主流水线上是看不见的，
+# 要等到某天本地跑一次才炸。把它放在这里，改完顺手点一次就有结论。
+#
+# 用法：Actions → Unit tests → Run workflow。
+# `only` 留空跑全部；只想验一个套件就填 `LeapControlTests/TripTrackerTests` 这种。
+name: Unit tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "-only-testing 过滤（留空 = 全部）"
+        required: false
+        default: ""
+      runner_label:
+        description: "Runner（默认 Intel 池，arm64 池常排队）"
+        required: false
+        default: "macos-26-intel"
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ${{ inputs.runner_label || 'macos-26-intel' }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      # 和出包那条保持同一套 Xcode 选择逻辑：镜像里的 27 preview 会被 `sort -V` 挑中，
+      # 它对 Swift 6 的严格检查更凶，容易把能编过的代码编挂。
+      - name: 选择 Xcode 26
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -z "$latest" ]; then
+            latest="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          fi
+          echo "使用 $latest"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      - name: 安装 xcodegen
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+
+      - name: 生成工程
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodegen generate
+
+      # 模拟器的名字随镜像变（iPhone 17 / 16 Pro 都可能），按 UDID 选最稳。
+      - name: 选一台可用模拟器
+        id: sim
+        run: |
+          set -euo pipefail
+          # 单行 python：`-c` 传多行代码时，YAML 块带来的前导缩进会被当成语法缩进，直接 IndentationError。
+          udid="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for rt in sorted(d, reverse=True) for x in d[rt] if "iPhone" in x["name"]))')"
+          echo "选中 $udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: 跑测试
+        working-directory: ios
+        env:
+          ONLY: ${{ inputs.only }}
+          SIM_UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          rm -rf build/tests.xcresult
+          # 不用数组拼参数：runner 上的 bash 是 3.2，空数组在 `set -u` 下会报 unbound variable。
+          if [ -n "$ONLY" ]; then
+            xcodebuild test -scheme LeapControl \
+              -destination "platform=iOS Simulator,id=$SIM_UDID" \
+              -resultBundlePath build/tests.xcresult \
+              -only-testing:"$ONLY" | tail -200
+          else
+            xcodebuild test -scheme LeapControl \
+              -destination "platform=iOS Simulator,id=$SIM_UDID" \
+              -resultBundlePath build/tests.xcresult | tail -200
+          fi
+
+      - name: 失败时把结果包带上来
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ios/build/tests.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
