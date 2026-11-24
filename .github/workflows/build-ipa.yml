@@ -26,6 +26,10 @@ on:
         description: "App Group（留空用仓库默认值 group.org.yipao.app）"
         required: false
         default: ""
+      runner_label:
+        description: "Runner（arm64 池常年排队，默认走 Intel 池）"
+        required: false
+        default: "macos-26-intel"
 
 concurrency:
   group: build-ipa-${{ github.ref }}
@@ -33,17 +37,25 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # GitHub 的 macOS 机器分两个独立硬件池：arm64（macos-latest / macos-15 / macos-26，
+    # 3 核 7GB）和 Intel（macos-15-intel / macos-26-intel，4 核 14GB）。arm64 池产能
+    # 常年吃紧，排队十几分钟拿不到机器就会被平台以 "job was not acquired by Runner"
+    # 取消（2026-11-24 实测，15 分钟必挂）。Intel 池是另一批物理机，通常空着。
+    runs-on: ${{ inputs.runner_label || 'macos-26-intel' }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
-      # 不写死 Xcode 版本：这个 App 用到了 iOS 26 的 API（`MKMapItem(location:address:)`），
-      # 需要较新的 SDK；用最新那个就行，也别因为 runner 镜像更新就整条流水线挂掉。
-      - name: 选择最新的 Xcode
+      # 优先 Xcode 26：这个 App 用到了 iOS 26 的 API（`MKMapItem(location:address:)`），
+      # 而镜像里同时装了 27 的 preview 和 16.x，`sort -V | tail -1` 会挑到 27 preview，
+      # 那个版本对 Swift 6 的严格检查更凶，容易把能编过的代码编挂。
+      - name: 选择 Xcode 26
         run: |
           set -euo pipefail
-          latest="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          latest="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -z "$latest" ]; then
+            latest="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          fi
           echo "使用 $latest"
           sudo xcode-select -s "$latest"
           xcodebuild -version
