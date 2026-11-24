@@ -27,7 +27,9 @@ if ! command -v xcodegen >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ -n "${TEAM_ID}${BUNDLE_ID}${APP_GROUP}" ]; then
+# `set -u` 下必须写 `${X:-}`：这三个都是可选环境变量，CI 里一个都不传，
+# 裸写 `${TEAM_ID}` 会以 "TEAM_ID: unbound variable" 直接退出——2026-11-24 就是这么挂的。
+if [ -n "${TEAM_ID:-}${BUNDLE_ID:-}${APP_GROUP:-}" ]; then
     args=()
     [ -n "${TEAM_ID:-}" ] && args+=(--team "$TEAM_ID")
     [ -n "${BUNDLE_ID:-}" ] && args+=(--bundle-id "$BUNDLE_ID")
