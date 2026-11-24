@@ -401,10 +401,10 @@ private struct MetricsKey: Equatable {
     }
 
     init(user: CLLocation?, vehicle: CLLocationCoordinate2D?) {
-        userLatitude = user.map { quantize($0.coordinate.latitude) }
-        userLongitude = user.map { quantize($0.coordinate.longitude) }
-        vehicleLatitude = vehicle.map { quantize($0.latitude) }
-        vehicleLongitude = vehicle.map { quantize($0.longitude) }
+        userLatitude = user.map { Self.quantize($0.coordinate.latitude) }
+        userLongitude = user.map { Self.quantize($0.coordinate.longitude) }
+        vehicleLatitude = vehicle.map { Self.quantize($0.latitude) }
+        vehicleLongitude = vehicle.map { Self.quantize($0.longitude) }
     }
 }
 
