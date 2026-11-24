@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 /// 演示账号。
@@ -164,5 +165,47 @@ enum ReviewDemo {
             acKwh: round1(2.6 + step(3) * 0.55),
             otherKwh: round1(1.8 + step(2) * 0.6)
         )
+    }
+
+    /// 演示用的逐趟行程。地名用杭州的公开地标，坐标也是市民中心一带的公开坐标，
+    /// 不是任何人的真实住址——审核和截图都会看到这一页。
+    ///
+    /// 时间按「今天 / 昨天 / 前天」相对生成，所以不管哪天打开演示账号，列表里都有
+    /// 今天那两趟，不会出现「今天 0 趟」这种看起来像坏了的状态。
+    static var tripLog: [TripRecord] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        /// (往前几天, 出发时分, 到达时分, 公里, 起电, 终电, 起点, 终点, 是否补记)
+        let seeds: [(Int, Int, Int, Double, Int, Int, String, String, Bool)] = [
+            (0, 8 * 60 + 42, 9 * 60 + 9, 11.6, 82, 79, "滨江区江陵路", "钱江新城市民中心", false),
+            (0, 18 * 60 + 6, 18 * 60 + 34, 13.2, 79, 76, "钱江新城市民中心", "滨江区江陵路", false),
+            (1, 7 * 60 + 55, 8 * 60 + 26, 17.4, 90, 86, "滨江区江陵路", "西湖区黄龙体育中心", false),
+            (1, 17 * 60 + 20, 17 * 60 + 51, 17.9, 86, 82, "西湖区黄龙体育中心", "滨江区江陵路", false),
+            (2, 10 * 60 + 12, 10 * 60 + 40, 14.8, 74, 71, "滨江区江陵路", "萧山区万象汇", false),
+            (3, 9 * 60 + 3, 16 * 60 + 48, 42.3, 88, 79, "滨江区江陵路", "临安区青山湖", true)
+        ]
+
+        return seeds.enumerated().map { index, seed in
+            let day = calendar.date(byAdding: .day, value: -seed.0, to: today) ?? today
+            let start = calendar.date(byAdding: .minute, value: seed.1, to: day) ?? day
+            let end = calendar.date(byAdding: .minute, value: seed.2, to: day) ?? start
+            // 坐标沿起点往西北方向散开一点，够让地图/距离有东西可用，不重要。
+            let latitude = 30.24704 - Double(index) * 0.004
+            let longitude = 120.21201 + Double(index) * 0.004
+            return TripRecord(
+                vin: nil,
+                startAt: start,
+                endAt: end,
+                distanceKm: seed.3,
+                startSoc: seed.4,
+                endSoc: seed.5,
+                start: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                end: CLLocationCoordinate2D(latitude: latitude + 0.012, longitude: longitude + 0.01),
+                startPlace: seed.6,
+                endPlace: seed.7,
+                isReconstructed: seed.8
+            )
+        }
     }
 }

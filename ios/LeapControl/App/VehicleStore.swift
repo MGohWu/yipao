@@ -772,6 +772,10 @@ final class VehicleStore {
             refreshBluetoothRuntime()
             await resolveLocationName()
             publishSnapshot()
+            // 行程记录就挂在这条轮询上：每 10 秒一帧，车动了就开一段，停稳半分钟收尾。
+            // 放在 publishSnapshot 之后，是为了先保证界面和卡片拿到最新车况——
+            // 切行程是副产品，不该拖慢刷新。
+            TripRecorder.shared.observe(fresh, vin: session.selectedVin)
         } catch {
             show(error: error)
         }
@@ -925,6 +929,8 @@ final class VehicleStore {
     private func enterDemo() {
         ReviewDemo.isActive = true
         session = ReviewDemo.session
+        // 演示态不记行程：那一页有写死的样例，别让「演出来的车」混进车主的真实记录。
+        TripRecorder.shared.forgetActiveTrip()
         let demoState = Self.demoVehicleState
         state = demoState
         lastUpdated = .now
@@ -940,6 +946,8 @@ final class VehicleStore {
         ReviewDemo.isActive = false
         loginEpoch += 1
         stopPolling()
+        // 正在跑的那一趟跟着会话一起丢掉：不写一条半截的行程，也不留着下个账号接着算。
+        TripRecorder.shared.forgetActiveTrip()
         endForegroundVerification()
         cancelBluetoothArmRetry()
         bleController.deactivate(clearBinding: true)

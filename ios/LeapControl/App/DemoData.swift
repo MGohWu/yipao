@@ -95,6 +95,7 @@ struct DemoScreenHost: View {
             case "parking": ParkingPhotosPreviewView()
             case "settings": SettingsView()
             case "trips": MileageStatsView()
+            case "triplog": TripHistoryView()
             case "cabin": ComfortCabinView()
             case "climateplan": ClimateAppointmentView()
             case "charging": ChargeView()

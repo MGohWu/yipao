@@ -30,6 +30,8 @@ struct MileageStatsView: View {
                     } else {
                         placeholder(text: "暂时拿不到里程能耗数据", spinning: false)
                     }
+                    // 官方统计拉不到也照样能看逐趟记录——那份数据在本机，不依赖这个接口。
+                    tripLogEntry
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
@@ -83,6 +85,35 @@ struct MileageStatsView: View {
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity)
             .padding(.top, 2)
+    }
+
+    /// 进「逐趟行程记录」的口子。
+    ///
+    /// 官方这套接口只到「天」，想看「今天这几趟分别去了哪」只能靠 App 自己记
+    /// （见 `TripHistoryView`）。入口放在这里，是因为车主心里这两件事本来就是一件：
+    /// 先看这个月跑了多少，再问那几趟是怎么跑的。
+    private var tripLogEntry: some View {
+        NavigationLink(value: HomeRoute.tripLog) {
+            GlassCard(radius: LeapStyle.tileRadius) {
+                HStack(spacing: 12) {
+                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LeapStyle.accent)
+                        .frame(width: 34, height: 34)
+                        .background(LeapStyle.accent.opacity(0.12), in: .circle)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("逐趟行程记录").font(.subheadline.weight(.medium))
+                        Text("每次出行的起止、里程与耗电")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 累计里程 / 累计能耗 / 交付天数
