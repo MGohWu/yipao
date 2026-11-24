@@ -8,7 +8,7 @@ struct VehicleLocationView: View {
     @Environment(VehicleStore.self) private var store
     @StateObject private var userLocation = UserLocationProvider()
     @State private var showingMapChoices = false
-    @State private var drivingMetrics: DrivingMetrics?
+    @State private var drivingRoute: DrivingRoute?
     @State private var drivingRouteUnavailable = false
     @State private var parkingPhoto: ParkingPhoto?
     @State private var parkingImage: UIImage?
@@ -211,11 +211,15 @@ struct VehicleLocationView: View {
     }
 
     private var drivingDistanceText: String {
-        guard let metrics = drivingMetrics else {
+        guard let route = drivingRoute else {
             if userLocation.location == nil { return "定位中" }
             return drivingRouteUnavailable ? "暂不可用" : "计算中"
         }
-        return "\(formatDistance(metrics.distance)) · \(Int((metrics.expectedTravelTime / 60).rounded())) 分钟"
+        // 耗时是「算出来的估计」，不是倒计时，取整到分钟就够；没给耗时（0）就只报距离，
+        // 别拿 0 分钟或凑出来的 1 分钟去填。不到一分钟的短途也归到 1 分钟，写 0 更像出错。
+        guard route.duration > 0 else { return formatDistance(route.distance) }
+        let minutes = max(1, Int((route.duration / 60).rounded()))
+        return "\(formatDistance(route.distance)) · \(minutes) 分钟"
     }
 
     private func distanceMetric(title: String, value: String) -> some View {
@@ -229,25 +233,26 @@ struct VehicleLocationView: View {
         meters < 1000 ? "约 \(Int(meters.rounded())) 米" : String(format: "约 %.1f 公里", meters / 1000)
     }
 
+    /// 取一次驾车路线。
+    ///
+    /// 问谁要、为什么不再只用苹果那套，见 `DrivingRouteService`。直线距离是本地算的，
+    /// 不依赖任何服务，这条路走不通时它照常显示。
     private func updateDrivingMetrics(vehicle: CLLocationCoordinate2D?) async {
         guard let vehicle, let user = userLocation.location else {
-            drivingMetrics = nil
+            drivingRoute = nil
             drivingRouteUnavailable = false
             return
         }
-        let request = MKDirections.Request()
-        request.source = MKMapItem(placemark: MKPlacemark(coordinate: user.coordinate))
-        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: vehicle))
-        request.transportType = .automobile
-        do {
-            let response = try await MKDirections(request: request).calculate()
-            drivingMetrics = response.routes.min(by: { $0.distance < $1.distance }).map {
-                DrivingMetrics(distance: $0.distance, expectedTravelTime: $0.expectedTravelTime)
-            }
-            drivingRouteUnavailable = drivingMetrics == nil
-        } catch {
-            drivingMetrics = nil
-            drivingRouteUnavailable = true
+        let route = await DrivingRouteService.route(from: user.coordinate, to: vehicle)
+        // 人挪了或车报了新坐标时，`.task(id:)` 会把上一次取消掉。被取消的那次回得晚，
+        // 结果不能盖掉新的——否则界面上会留在旧位置上，看着像「距离不跟着变」。
+        guard !Task.isCancelled else { return }
+        drivingRoute = route
+        drivingRouteUnavailable = route == nil
+        if let route {
+            BLEDiagnostics.record("route", "驾车 \(Int(route.distance))m/\(Int(route.duration))s 来源=\(route.source.label)")
+        } else {
+            BLEDiagnostics.record("route", "驾车路线算不出来（高德/苹果都没给）")
         }
     }
 
@@ -355,11 +360,6 @@ private struct ParkingPhotoViewer: View {
         }
         .preferredColorScheme(.dark)
     }
-}
-
-private struct DrivingMetrics {
-    let distance: CLLocationDistance
-    let expectedTravelTime: TimeInterval
 }
 
 private struct MetricsKey: Equatable {

@@ -8,6 +8,7 @@
 #     TEAM_ID=ABCDE12345   写入工程（不打进 IPA，但签名身份要一致才省事）
 #     BUNDLE_ID=com.x.y    主 App 的 Bundle ID，小组件自动加 .widget
 #     APP_GROUP=group.x.y  必须和开发者后台注册的那个 App Group 一致
+#     AMAP_KEY=xxxx        高德 Web 服务 key，写进 Info.plist；不传就用苹果 MapKit 算驾车距离
 #     OUTPUT=/path/x.ipa   产物路径
 #
 # 为什么要显式关掉签名：`CODE_SIGNING_ALLOWED=NO` 打出来的 .app 不带 _CodeSignature，
@@ -29,11 +30,12 @@ fi
 
 # `set -u` 下必须写 `${X:-}`：这三个都是可选环境变量，CI 里一个都不传，
 # 裸写 `${TEAM_ID}` 会以 "TEAM_ID: unbound variable" 直接退出——2026-11-24 就是这么挂的。
-if [ -n "${TEAM_ID:-}${BUNDLE_ID:-}${APP_GROUP:-}" ]; then
+if [ -n "${TEAM_ID:-}${BUNDLE_ID:-}${APP_GROUP:-}${AMAP_KEY:-}" ]; then
     args=()
     [ -n "${TEAM_ID:-}" ] && args+=(--team "$TEAM_ID")
     [ -n "${BUNDLE_ID:-}" ] && args+=(--bundle-id "$BUNDLE_ID")
     [ -n "${APP_GROUP:-}" ] && args+=(--app-group "$APP_GROUP")
+    [ -n "${AMAP_KEY:-}" ] && args+=(--amap-key "$AMAP_KEY")
     python3 scripts/configure-signing.py "${args[@]}"
     echo
 fi

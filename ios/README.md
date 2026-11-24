@@ -47,19 +47,42 @@ Vendor/GmSSL/      GmSSL 预编译库
 | Bundle ID | `project.yml` 各 target 的 `PRODUCT_BUNDLE_IDENTIFIER` | 默认 `org.yipao.app`（主 App）、`org.yipao.app.widget`（小组件）、`org.yipao.app.tests`。Bundle ID 全局唯一，用自己的账号签名时多半要改成你自己的前缀。 |
 | App Group | 两份 `.entitlements`、两份 `Info.plist` 的 `YPAppGroup`、`VehicleSnapshot.swift` 里的兜底常量 | 默认 `group.org.yipao.app`。**四处必须一致**，还要在开发者后台注册并在两个 App ID 上都勾上。 |
 | 钥匙串共享组 | 两份 entitlements 里的 `keychain-access-groups` | 默认 `$(AppIdentifierPrefix)org.yipao.app`，App 与小组件必须相同。 |
+| 高德 Web 服务 key | `LeapControl/Info.plist` 的 `AMapWebKey` | 可选。**只影响「驾车距离」**，不填就退回苹果 MapKit，见下面「驾车距离」。 |
 
 上面这几项不要手改——**一条命令改齐**：
 
 ```bash
 cd ios
 python3 scripts/configure-signing.py --team ABCDE12345 \
-    --bundle-id com.example.yipao --app-group group.com.example.yipao
+    --bundle-id com.example.yipao --app-group group.com.example.yipao \
+    --amap-key 你的高德key
 ```
 
 它会改完 6 个文件并校验 App Group 四处逐字一致。自签之后小组件和灵动岛怎么才能不掉，
 见 [`SIGNING.md`](SIGNING.md)。
 
-iOS 端用的是系统 MapKit，不需要地图 SDK key。
+地图本身用的是系统 MapKit，不需要地图 SDK key；只有「驾车距离」这一个数字要问高德。
+
+### 驾车距离问谁要
+
+三端原本各问各的：安卓走高德 SDK（`RouteSearchV2`）、鸿蒙走华为 Petal
+（`navi.getDrivingMatrix`），只有 iOS 用 `MKDirections`。坐标口径统一之后，
+剩下的差异全在「谁来算这条路」上——苹果在大陆的路线引擎面对老城路网会给出更长的一条
+（绕开小路、多一个掉头），同一对起终点比高德多出几百米很常见，表现就是
+**车标位置和直线距离都对，唯独驾车距离偏大**。
+
+所以 `DrivingRouteService` 默认问高德，拿不到才退回苹果：
+
+- 有 `AMapWebKey` → `restapi.amap.com/v3/direction/driving`，多条方案取最短，
+  和安卓端同一套数据。
+- 没配或请求失败 → `MKDirections`，并且 `requestsAlternateRoutes = true` 之后自己取最短
+  （苹果默认只回一条，还不保证是最短的）。
+
+key 在 [高德开放平台](https://console.amap.com) 申请：应用管理 → 新建应用 → 添加 Key，
+**服务平台选「Web服务」**。个人开发者免费，需要实名认证。这一步完全可选——
+不配只是驾车距离不如高德准，其它功能一概不受影响。
+
+实际用的是哪个源，会写进 App 内的诊断日志（`[route] 驾车 892m/318s 来源=高德`）。
 
 改完配置后重新执行一次 `xcodegen generate`。
 

@@ -85,5 +85,12 @@
 	     默认值见 `LeapControl.entitlements`。 -->
 	<key>YPAppGroup</key>
 	<string>group.ab6938971b3fa793.1</string>
+	<!-- 高德 Web 服务 key，只用来问「驾车距离」（`DrivingRouteService`）。
+	     留空 = 不问高德，退回苹果 MapKit 的路线；填上就和安卓端同一套数据。
+	     申请：https://console.amap.com → 应用管理 → 新建应用 → 添加 Key，
+	     服务平台选「Web服务」。个人开发者免费，需实名认证。
+	     写入方式见 scripts/configure-signing.py 的 amap key 参数，别手改。 -->
+	<key>AMapWebKey</key>
+	<string></string>
 </dict>
 </plist>

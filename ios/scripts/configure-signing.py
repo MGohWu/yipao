@@ -66,6 +66,29 @@ def current_app_group(text: str) -> str:
     return match.group(1)
 
 
+def current_keychain_group(text: str) -> str:
+    match = re.search(
+        r"<key>keychain-access-groups</key>\s*<array>\s*<string>([^<]*)</string>", text
+    )
+    return match.group(1) if match else ""
+
+
+def keychain_group_for(team: str | None, existing: str, bundle_id: str) -> str:
+    """钥匙串共享组写成完整值，不用 `$(AppIdentifierPrefix)`。
+
+    重签工具（全能签、Sideloadly 之类）不一定展开这个构建期变量，留着它签名会报错，
+    或者 App 与小组件各读各的登录态。所以这里的优先级是：
+    本次给了 Team → 用 Team；没给但现有值里已经带 Team 前缀 → 沿用那个前缀；
+    两样都没有才退回变量形式（只有 Xcode 直接编译的场景）。
+    """
+    if team:
+        return f"{team}.{bundle_id}"
+    match = re.match(r"^([A-Z0-9]{10})\.", existing)
+    if match:
+        return f"{match.group(1)}.{bundle_id}"
+    return "$(AppIdentifierPrefix)" + bundle_id
+
+
 def replace_entitlement_array(text: str, key: str, value: str) -> str:
     pattern = re.compile(
         r"(<key>" + re.escape(key) + r"</key>\s*<array>\s*<string>)[^<]*(</string>)"
@@ -91,6 +114,10 @@ def main() -> int:
     parser.add_argument("--team", help="Apple Team ID（10 位），留空表示不改")
     parser.add_argument("--bundle-id", help="主 App 的 Bundle ID，小组件自动加 .widget")
     parser.add_argument("--app-group", help="App Group 标识，形如 group.com.example.yipao")
+    parser.add_argument(
+        "--amap-key",
+        help="高德 Web 服务 key（只写进主 App 的 Info.plist）。传空串表示清掉、退回苹果路线",
+    )
     parser.add_argument("--dry-run", action="store_true", help="只打印，不落盘")
     args = parser.parse_args()
 
@@ -103,7 +130,9 @@ def main() -> int:
 
     widget_bundle_id = bundle_id + ".widget"
     tests_bundle_id = bundle_id + ".tests"
-    keychain_group = "$(AppIdentifierPrefix)" + bundle_id
+    keychain_group = keychain_group_for(
+        team, current_keychain_group(read(APP_ENTITLEMENTS)), bundle_id
+    )
 
     if not app_group.startswith("group."):
         sys.exit("App Group 必须以 group. 开头（例如 group.com.example.yipao）")
@@ -153,6 +182,18 @@ def main() -> int:
     swift = re.sub(r'return "group\.[^"]*"', f'return "{app_group}"', swift)
     write(SNAPSHOT_SWIFT, swift, args.dry_run)
 
+    # 5. 高德 Web 服务 key（只写主 App）：决定「驾车距离」问谁要，见 DrivingRouteService。
+    #    不打到 stdout 上——CI 日志是公开的，key 露出去等于送人。
+    if args.amap_key is not None:
+        amap_key = args.amap_key.strip()
+        app_info = replace_plist_string(read(APP_INFO), "AMapWebKey", amap_key)
+        write(APP_INFO, app_info, args.dry_run)
+        if amap_key:
+            print(f"高德 key      : {amap_key[:4]}…（{len(amap_key)} 位，已写入主 App 的 Info.plist）")
+        else:
+            print("高德 key      : 已清空（驾车距离退回苹果 MapKit）")
+        print()
+
     # 校验：两个 plist 必须还能解析，三处 App Group 必须逐字相同
     if not args.dry_run:
         for path in (APP_INFO, WIDGET_INFO, APP_ENTITLEMENTS, WIDGET_ENTITLEMENTS):
@@ -171,7 +212,11 @@ def main() -> int:
         }
         if len(set(groups.values()) | set(ent_groups.values())) != 1:
             sys.exit(f"App Group 不一致：{groups} / {ent_groups}")
-        print("已写入，四个 plist 都能解析，App Group 四处逐字一致。")
+        keychains = {p.name: current_keychain_group(read(p))
+                     for p in (APP_ENTITLEMENTS, WIDGET_ENTITLEMENTS)}
+        if len(set(keychains.values())) != 1:
+            sys.exit(f"钥匙串共享组不一致：{keychains}")
+        print("已写入，四个 plist 都能解析，App Group 四处逐字一致，钥匙串共享组两份一致。")
         print()
         print("接下来：")
         print("  1) 开发者后台 App Groups 里注册 " + app_group)

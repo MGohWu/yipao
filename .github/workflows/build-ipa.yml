@@ -26,6 +26,10 @@ on:
         description: "App Group（留空用仓库默认值 group.org.yipao.app）"
         required: false
         default: ""
+      amap_key:
+        description: "高德 Web 服务 key（留空则驾车距离走苹果 MapKit，通常偏大）"
+        required: false
+        default: ""
       runner_label:
         description: "Runner（arm64 池常年排队，默认走 Intel 池）"
         required: false
@@ -69,18 +73,20 @@ jobs:
           xcodegen --version
 
       - name: 对齐签名配置
-        if: ${{ inputs.team_id != '' || inputs.bundle_id != '' || inputs.app_group != '' }}
+        if: ${{ inputs.team_id != '' || inputs.bundle_id != '' || inputs.app_group != '' || inputs.amap_key != '' }}
         working-directory: ios
         env:
           TEAM_ID: ${{ inputs.team_id }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
           APP_GROUP: ${{ inputs.app_group }}
+          AMAP_KEY: ${{ inputs.amap_key }}
         run: |
           set -euo pipefail
           args=()
           [ -n "$TEAM_ID" ] && args+=(--team "$TEAM_ID")
           [ -n "$BUNDLE_ID" ] && args+=(--bundle-id "$BUNDLE_ID")
           [ -n "$APP_GROUP" ] && args+=(--app-group "$APP_GROUP")
+          [ -n "$AMAP_KEY" ] && args+=(--amap-key "$AMAP_KEY")
           python3 scripts/configure-signing.py "${args[@]}"
 
       - name: 编译（不签名）
@@ -113,6 +119,13 @@ jobs:
           echo "--- 扩展点 ---"
           /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" \
             "$app/PlugIns/LeapWidget.appex/Info.plist"
+          echo "--- 驾车距离数据源 ---"
+          key="$(/usr/libexec/PlistBuddy -c "Print :AMapWebKey" "$app/Info.plist" 2>/dev/null || true)"
+          if [ -n "$key" ]; then
+            echo "高德 Web 服务（key ${#key} 位）"
+          else
+            echo "苹果 MapKit（未配置高德 key）"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
