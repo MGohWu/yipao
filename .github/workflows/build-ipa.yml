@@ -122,9 +122,9 @@ jobs:
           echo "--- 驾车距离数据源 ---"
           key="$(/usr/libexec/PlistBuddy -c "Print :AMapWebKey" "$app/Info.plist" 2>/dev/null || true)"
           if [ -n "$key" ]; then
-            echo "高德 Web 服务（key ${#key} 位）"
+            echo "高德 Web 服务（key ${#key} 位）→ 位置卡显示「驾车距离」"
           else
-            echo "苹果 MapKit（未配置高德 key）"
+            echo "未配置 → 位置卡不显示「驾车距离」，只显示直线距离"
           fi
 
       - uses: actions/upload-artifact@v4

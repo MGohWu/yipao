@@ -47,6 +47,13 @@ enum DrivingRouteService {
         return (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// 有没有可靠的数据源。**界面拿这个决定要不要显示「驾车距离」这一格。**
+    ///
+    /// 没配 key 时干脆不显示：苹果在市区老路里给的数常常偏大，摆一个自己都不信的
+    /// 数字上去，比不摆更糟——车主会拿它跟高德比，然后开始怀疑是不是定位又坏了。
+    /// 真要开过去，旁边的「导航到车辆」点一下就有准确路线和耗时。
+    static var isConfigured: Bool { !amapWebKey.isEmpty }
+
     /// 取驾车路线：高德优先（和安卓端同一套数据），拿不到再退苹果。
     ///
     /// 两步都失败才返回 nil，界面据此显示「暂不可用」——直线距离是本地算的，

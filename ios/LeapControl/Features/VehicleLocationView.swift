@@ -46,6 +46,8 @@ struct VehicleLocationView: View {
             userLocation.start()
         }
         .task(id: MetricsKey(user: userLocation.location, vehicle: coordinate)) {
+            // 没配高德 key 就连请求都不发：那一格本来就不显示。
+            guard DrivingRouteService.isConfigured else { return }
             await updateDrivingMetrics(vehicle: coordinate)
         }
         .task(id: coordinate?.latitude) {
@@ -82,7 +84,12 @@ struct VehicleLocationView: View {
 
                     HStack(spacing: 16) {
                         distanceMetric(title: "直线距离", value: straightDistanceText)
-                        distanceMetric(title: "驾车距离", value: drivingDistanceText)
+                        // 没配高德 key 就整格不出现：这一格以前问的是苹果，市区老路里
+                        // 给出的距离常常偏大，和车标位置对不上，反而让人怀疑定位。
+                        // 要开过去点下面的「导航到车辆」就行，那条路线是准的。
+                        if DrivingRouteService.isConfigured {
+                            distanceMetric(title: "驾车距离", value: drivingDistanceText)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

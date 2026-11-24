@@ -71,16 +71,20 @@ python3 scripts/configure-signing.py --team ABCDE12345 \
 （绕开小路、多一个掉头），同一对起终点比高德多出几百米很常见，表现就是
 **车标位置和直线距离都对，唯独驾车距离偏大**。
 
-所以 `DrivingRouteService` 默认问高德，拿不到才退回苹果：
+所以 `DrivingRouteService` 只在**配了高德 key** 时才取这个数：
 
 - 有 `AMapWebKey` → `restapi.amap.com/v3/direction/driving`，多条方案取最短，
-  和安卓端同一套数据。
-- 没配或请求失败 → `MKDirections`，并且 `requestsAlternateRoutes = true` 之后自己取最短
-  （苹果默认只回一条，还不保证是最短的）。
+  和安卓端同一套数据；位置卡上正常显示「驾车距离 · N 分钟」。
+- 没配 key → **这一格根本不显示**，位置卡上只剩「直线距离」。
+  连请求都不发。不是「显示一个差不多的数」——苹果那个偏大的数摆上去，
+  车主一跟高德比就会以为定位又偏了，比不显示更糟。要开过去，点「导航到车辆」
+  就有准确的路线和耗时。
+- 配了 key 但这一次请求失败 → 退回 `MKDirections`（`requestsAlternateRoutes = true`
+  之后自己取最短），实在拿不到才显示「暂不可用」。
 
 key 在 [高德开放平台](https://console.amap.com) 申请：应用管理 → 新建应用 → 添加 Key，
 **服务平台选「Web服务」**。个人开发者免费，需要实名认证。这一步完全可选——
-不配只是驾车距离不如高德准，其它功能一概不受影响。
+不配只是少一格数字，其它功能一概不受影响。
 
 实际用的是哪个源，会写进 App 内的诊断日志（`[route] 驾车 892m/318s 来源=高德`）。
 
