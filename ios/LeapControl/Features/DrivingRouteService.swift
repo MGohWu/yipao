@@ -77,10 +77,43 @@ enum DrivingRouteService {
         guard let url = amapURL(from: origin, to: destination, key: amapWebKey) else { return nil }
         var request = URLRequest(url: url)
         // 位置页是个要立刻出数的界面，卡住比没有更难看。超时就退回苹果那条。
-        request.timeoutInterval = 5
+        //
+        // 8 秒而不是 5 秒：手机上开着代理、或者 4G 信号在切换时，5 秒很容易不够，
+        // 一超时就静默退回苹果——而苹果在这个区域给的距离比高德大一截，
+        // 表现为「明明装了 key，数还是老样子」，从界面上根本看不出差别。
+        request.timeoutInterval = 8
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
-        return parseAMap(data)
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if let route = parseAMap(data) {
+                BLEDiagnostics.record(
+                    "route",
+                    "高德 http=\(status) \(Int(route.distance.rounded()))m/\(Int(route.duration))s"
+                )
+                return route
+            }
+            // 走到这说明请求通了但回包不是「成功」：key 错、配额用尽、开了数字签名，
+            // 高德会在 info/infocode 里说清楚。不记下来就只能靠猜。
+            BLEDiagnostics.record("route", "高德无可用路线 http=\(status) \(failureSummary(data))")
+            return nil
+        } catch {
+            BLEDiagnostics.record("route", "高德请求失败 \(BLEDiagnostics.error(error))")
+            return nil
+        }
+    }
+
+    /// 高德失败回包里到底说了什么。只为诊断，不参与业务判断。
+    static func failureSummary(_ data: Data) -> String {
+        struct Failure: Decodable {
+            let status: String?
+            let info: String?
+            let infocode: String?
+        }
+        guard let f = try? JSONDecoder().decode(Failure.self, from: data) else {
+            return "回包无法解析（\(data.count) 字节）"
+        }
+        return "status=\(f.status ?? "-") info=\(f.info ?? "-") code=\(f.infocode ?? "-")"
     }
 
     /// 高德驾车路线的请求地址。

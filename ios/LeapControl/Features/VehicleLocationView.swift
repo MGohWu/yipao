@@ -88,7 +88,7 @@ struct VehicleLocationView: View {
                         // 给出的距离常常偏大，和车标位置对不上，反而让人怀疑定位。
                         // 要开过去点下面的「导航到车辆」就行，那条路线是准的。
                         if DrivingRouteService.isConfigured {
-                            distanceMetric(title: "驾车距离", value: drivingDistanceText)
+                            distanceMetric(title: drivingMetricTitle, value: drivingDistanceText)
                         }
                     }
                 }
@@ -215,6 +215,18 @@ struct VehicleLocationView: View {
         guard let vehicle = coordinate, let user = userLocation.location else { return "定位中" }
         return formatDistance(CLLocation(latitude: vehicle.latitude, longitude: vehicle.longitude)
             .distance(from: user))
+    }
+
+    /// 「驾车距离」这一格的小标题，把**数据是谁给的**写在上面。
+    ///
+    /// 不是为了炫技，是因为「数不对」和「数是从另一家要的」在界面上长得一模一样：
+    /// 高德回 933 米、苹果回 1.3 公里，同一个格子同一个位置，只是数字不同。
+    /// 没有这个标注，就只能靠猜是 key 没生效、网络失败，还是这个区域本来就该这么远。
+    ///
+    /// 有来源就一直显示：车主知道这一格是高德给的还是苹果给的，本身就值这个像素。
+    private var drivingMetricTitle: String {
+        guard let route = drivingRoute else { return "驾车距离" }
+        return "驾车距离 · \(route.source.label)"
     }
 
     private var drivingDistanceText: String {
@@ -375,11 +387,24 @@ private struct MetricsKey: Equatable {
     let vehicleLatitude: Double?
     let vehicleLongitude: Double?
 
+    /// 坐标先量化到约 11 米再参与比较，**这一步是必须的**。
+    ///
+    /// 原来直接拿 `CLLocation.coordinate` 的原始 Double 比：人站在那儿不动，GPS 也会
+    /// 每秒抖几十厘米，纬度经度每帧都是新值，于是这个 key 一直在变，`.task(id:)` 就
+    /// 一直在重算——一秒能发好几次高德请求。个人开发者的 QPS 只有个位数，立刻被限流
+    /// （`CUQPS_HAS_EXCEEDED_THE_LIMIT`），而失败是静默退回苹果的：界面上照样有数，
+    /// 只是那个数是苹果的。表现出来就是「明明配了 key，距离还是老样子」，极难查。
+    ///
+    /// 4 位小数 ≈ 11 米。走 11 米才重算一次，这个精度对「到车还有多远」毫无损失。
+    private static func quantize(_ value: Double) -> Double {
+        (value * 10_000).rounded() / 10_000
+    }
+
     init(user: CLLocation?, vehicle: CLLocationCoordinate2D?) {
-        userLatitude = user?.coordinate.latitude
-        userLongitude = user?.coordinate.longitude
-        vehicleLatitude = vehicle?.latitude
-        vehicleLongitude = vehicle?.longitude
+        userLatitude = user.map { quantize($0.coordinate.latitude) }
+        userLongitude = user.map { quantize($0.coordinate.longitude) }
+        vehicleLatitude = vehicle.map { quantize($0.latitude) }
+        vehicleLongitude = vehicle.map { quantize($0.longitude) }
     }
 }
 
