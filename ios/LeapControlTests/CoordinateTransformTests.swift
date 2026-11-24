@@ -5,10 +5,11 @@ import Testing
 
 /// GCJ-02 ↔ WGS-84 换算的数学正确性。
 ///
-/// **注意：`CoordinateTransform` 在生产代码里只有一个调用方**——`VehicleState.shareableCoordinate`，
-/// 且只在「车只报了 `3724/3725` 或 `2190/2191` 这两组 WGS-84 原始坐标」时才转。`2/3` 本来就是
-/// GCJ-02，原样上图（原委见 `CoordinateTransform` 头注释）。这组测试保的是「换算本身是对的」：
-/// 它通过**不代表**该往渲染链路里加调用点，多转一次照样偏半公里。
+/// **注意：`CoordinateTransform.gcj02(fromWGS84:)` 在生产代码里只有两个调用方，都在出口上**——
+/// `VehicleState.shareableCoordinate`（车只报了 `3724/3725` 或 `2190/2191` 这两组 WGS-84
+/// 原始坐标时）和 `UserLocationProvider.coordinate`（手机的 `CLLocationManager` 输出）。
+/// `2/3` 本来就是 GCJ-02，原样上图（原委见 `CoordinateTransform` 头注释）。
+/// 这组测试保的是「换算本身是对的」：它通过**不代表**该往渲染链路中间加调用点，多转一次照样偏半公里。
 @Suite("坐标系换算")
 struct CoordinateTransformTests {
 
@@ -21,6 +22,26 @@ struct CoordinateTransformTests {
     ) -> CLLocationDistance {
         CLLocation(latitude: lhs.latitude, longitude: lhs.longitude)
             .distance(from: CLLocation(latitude: rhs.latitude, longitude: rhs.longitude))
+    }
+
+    /// 手机和车必须落进同一个口径，否则「到车还有多远」永远是错的。
+    ///
+    /// 这条钉的是 1.6 及之前那个真实故障：车标是 GCJ-02、手机是 `CLLocationManager`
+    /// 原样输出的 WGS-84，两者只相差一个换算，所以地图上看着「车标挺准」，
+    /// 而相机、直线距离、高德算路的起点全都偏四五百米。换算这条链一断，误差就是这个量级——
+    /// 它不是「GPS 抖了一下」，别当成信号问题去调精度。
+    @Test("手机坐标不换算时，站在车边也会差出半条街")
+    func phoneAndVehicleMustShareOneDatum() {
+        // 车端报的 GCJ-02，就是车实际停的那个点。
+        let vehicleGCJ02 = hangzhou
+        // 人站在车边，手机拿到的同一个物理点，CoreLocation 给的是 WGS-84。
+        let phoneRaw = CoordinateTransform.wgs84(fromGCJ02: vehicleGCJ02)
+
+        let mixed = distance(phoneRaw, vehicleGCJ02)
+        let unified = distance(CoordinateTransform.gcj02(fromWGS84: phoneRaw), vehicleGCJ02)
+
+        #expect(mixed > 300, "没换算时误差应该几百米，小于 300 说明这个点不适合当样本")
+        #expect(unified < 1, "换算后应回到同一处，误差超过 1 米说明链路里转了两次")
     }
 
     @Test("往返一次能回到原点")

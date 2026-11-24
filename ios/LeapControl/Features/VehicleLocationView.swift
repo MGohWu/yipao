@@ -24,7 +24,7 @@ struct VehicleLocationView: View {
             if let coordinate {
                 VehicleMap(coordinate: coordinate,
                            vehicleName: store.vehicleName,
-                           userCoordinate: userLocation.location?.coordinate)
+                           userCoordinate: userLocation.coordinate)
             } else {
                 LeapBackground(tint: LeapStyle.cool)
                 ContentUnavailableView {
@@ -45,7 +45,7 @@ struct VehicleLocationView: View {
         .task {
             userLocation.start()
         }
-        .task(id: MetricsKey(user: userLocation.location, vehicle: coordinate)) {
+        .task(id: MetricsKey(user: userLocation.coordinate, vehicle: coordinate)) {
             // 没配高德 key 就连请求都不发：那一格本来就不显示。
             guard DrivingRouteService.isConfigured else { return }
             await updateDrivingMetrics(vehicle: coordinate)
@@ -210,11 +210,10 @@ struct VehicleLocationView: View {
     }
 
     private var straightDistanceText: String {
-        // 两边都是 GCJ-02：在中国大陆 `CLLocationManager` 返回的就是加过偏的 GCJ-02，
-        // 车端坐标也已经归一过。谁被单独转一次，人站在车边上都会显示几百米。
-        guard let vehicle = coordinate, let user = userLocation.location else { return "定位中" }
-        return formatDistance(CLLocation(latitude: vehicle.latitude, longitude: vehicle.longitude)
-            .distance(from: user))
+        // 两边都是 GCJ-02：车端由 `shareableCoordinate` 归一，手机由 `UserLocationProvider`
+        // 在出口转过一次。谁再单独转一次，人站在车边上都会显示几百米。
+        guard let vehicle = coordinate, let user = userLocation.coordinate else { return "定位中" }
+        return formatDistance(Self.distance(from: user, to: vehicle))
     }
 
     /// 「驾车距离」这一格的小标题，把**数据是谁给的**写在上面。
@@ -235,16 +234,13 @@ struct VehicleLocationView: View {
     /// 驾车会绕出一倍的距离（实测同一对点步行 363 米、驾车 1486 米），那不是用户要的答案。
     /// 判据只用直线距离，不依赖任何网络结果，所以这个值在算路之前就已经定了。
     private var routeMode: TravelMode {
-        guard let user = userLocation.location, let vehicle = coordinate else { return .walking }
-        let straight = user.distance(
-            from: CLLocation(latitude: vehicle.latitude, longitude: vehicle.longitude)
-        )
-        return TravelMode.preferred(forStraightDistance: straight)
+        guard let user = userLocation.coordinate, let vehicle = coordinate else { return .walking }
+        return TravelMode.preferred(forStraightDistance: Self.distance(from: user, to: vehicle))
     }
 
     private var drivingDistanceText: String {
         guard let route = drivingRoute else {
-            if userLocation.location == nil { return "定位中" }
+            if userLocation.coordinate == nil { return "定位中" }
             return drivingRouteUnavailable ? "暂不可用" : "计算中"
         }
         // 耗时是「算出来的估计」，不是倒计时，取整到分钟就够；没给耗时（0）就只报距离，
@@ -265,22 +261,29 @@ struct VehicleLocationView: View {
         meters < 1000 ? "约 \(Int(meters.rounded())) 米" : String(format: "约 %.1f 公里", meters / 1000)
     }
 
+    /// 两个 GCJ-02 之间的球面距离。只用来比远近，不参与显示以外的任何判断。
+    private static func distance(
+        from origin: CLLocationCoordinate2D,
+        to destination: CLLocationCoordinate2D
+    ) -> CLLocationDistance {
+        CLLocation(latitude: origin.latitude, longitude: origin.longitude)
+            .distance(from: CLLocation(latitude: destination.latitude, longitude: destination.longitude))
+    }
+
     /// 取一次驾车路线。
     ///
     /// 问谁要、为什么不再只用苹果那套，见 `DrivingRouteService`。直线距离是本地算的，
     /// 不依赖任何服务，这条路走不通时它照常显示。
     private func updateDrivingMetrics(vehicle: CLLocationCoordinate2D?) async {
-        guard let vehicle, let user = userLocation.location else {
+        guard let vehicle, let user = userLocation.coordinate else {
             drivingRoute = nil
             drivingRouteUnavailable = false
             return
         }
         let mode = TravelMode.preferred(
-            forStraightDistance: user.distance(
-                from: CLLocation(latitude: vehicle.latitude, longitude: vehicle.longitude)
-            )
+            forStraightDistance: Self.distance(from: user, to: vehicle)
         )
-        let route = await DrivingRouteService.route(from: user.coordinate, to: vehicle, mode: mode)
+        let route = await DrivingRouteService.route(from: user, to: vehicle, mode: mode)
         // 人挪了或车报了新坐标时，`.task(id:)` 会把上一次取消掉。被取消的那次回得晚，
         // 结果不能盖掉新的——否则界面上会留在旧位置上，看着像「距离不跟着变」。
         guard !Task.isCancelled else { return }
@@ -421,9 +424,9 @@ private struct MetricsKey: Equatable {
         (value * 10_000).rounded() / 10_000
     }
 
-    init(user: CLLocation?, vehicle: CLLocationCoordinate2D?) {
-        userLatitude = user.map { Self.quantize($0.coordinate.latitude) }
-        userLongitude = user.map { Self.quantize($0.coordinate.longitude) }
+    init(user: CLLocationCoordinate2D?, vehicle: CLLocationCoordinate2D?) {
+        userLatitude = user.map { Self.quantize($0.latitude) }
+        userLongitude = user.map { Self.quantize($0.longitude) }
         vehicleLatitude = vehicle.map { Self.quantize($0.latitude) }
         vehicleLongitude = vehicle.map { Self.quantize($0.longitude) }
     }
@@ -472,16 +475,30 @@ enum AvailableMapApp: String, CaseIterable, Identifiable {
     }
 }
 
+/// 手机自己在哪。**对外只给 GCJ-02 一个口径。**
+///
+/// `CLLocationManager` 在大陆吐的是 GPS 原始坐标（WGS-84），地图底图（苹果、高德、腾讯）
+/// 是 GCJ-02，两者差 300~800 米。这件事很容易被漏掉，因为 `Map` 上那个系统蓝点
+/// （`UserAnnotation`）一直是准的——那是 MapKit 在渲染蓝点的时候自己纠了偏，
+/// 并不代表 `CLLocation.coordinate` 也是 GCJ-02。之前这一页就踩在这上面：
+/// 车标是 GCJ-02、手机是 WGS-84，同一个屏幕上的两个点相差半条街，
+/// 相机跳过去偏、直线距离偏、连高德算路的起点都偏（把 WGS-84 当 GCJ-02 传过去了）。
+///
+/// 所以这里在出口处转一次，之后整页只认 `coordinate`。见 `CoordinateTransform`。
 @MainActor
 private final class UserLocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published private(set) var location: CLLocation?
+    /// 手机位置，已经是 GCJ-02，和车标同一口径。地图、距离、算路都只许用这个。
+    @Published private(set) var coordinate: CLLocationCoordinate2D?
+
     private let manager = CLLocationManager()
 
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        manager.distanceFilter = 20
+        // 「到车还有多远」是按米计较的，100 米的精度本身就够偏出半条街。
+        // 步行那格的判据（2 公里）和直线距离都直接吃这个数，这里要准。
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 10
     }
 
     func start() {
@@ -490,7 +507,22 @@ private final class UserLocationProvider: NSObject, ObservableObject, CLLocation
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        location = locations.last
+        // 精度是负数表示这个点无效；大于 50 米的点基本是基站/信号差时候的粗定位，
+        // 拿它算出来的距离会莫名其妙地多出几百米，宁可不更新，等下一个点。
+        guard let latest = locations.last,
+              latest.horizontalAccuracy > 0,
+              latest.horizontalAccuracy <= 50
+        else { return }
+        let converted = CoordinateTransform.gcj02(fromWGS84: latest.coordinate)
+        coordinate = converted
+        // 这条日志是为了「到底是定位漂了，还是坐标系又混了」能一眼分开：
+        // 大陆的换算量固定在几百米，方向随位置变；信号差是几十米到几公里、方向乱。
+        let shift = CLLocation(latitude: latest.coordinate.latitude, longitude: latest.coordinate.longitude)
+            .distance(from: CLLocation(latitude: converted.latitude, longitude: converted.longitude))
+        BLEDiagnostics.record(
+            "phone",
+            String(format: "精度%.0fm 换算%.0fm", latest.horizontalAccuracy, shift)
+        )
     }
 }
 
@@ -505,7 +537,11 @@ private final class UserLocationProvider: NSObject, ObservableObject, CLLocation
 private struct VehicleMap: View {
     let coordinate: CLLocationCoordinate2D
     let vehicleName: String
-    /// 手机自己在哪。没定位到就不摆「回到我的位置」那个钮——按下去没地方可去。
+    /// 手机自己在哪，**GCJ-02**（`UserLocationProvider.coordinate` 的出口）。
+    /// 没定位到就不摆「回到我的位置」那个钮——按下去没地方可去。
+    ///
+    /// 这里收的必须是转过的那一份：相机拿 WGS-84 落点去对 GCJ-02 底图，按下按钮后
+    /// 屏幕中心会稳稳偏出半条街，看上去就像「定位图标指的不是我站的地方」。
     let userCoordinate: CLLocationCoordinate2D?
 
     @State private var camera: MapCameraPosition
@@ -522,6 +558,9 @@ private struct VehicleMap: View {
             Annotation(vehicleName, coordinate: coordinate) {
                 VehicleMarker()
             }
+            // 系统蓝点交给 MapKit 画：它自己会把 CoreLocation 的 WGS-84 纠到 GCJ-02 底图上，
+            // 这个点是准的（正因为准，才最容易被误当成「CoreLocation 输出的也是 GCJ-02」）。
+            // 别改成自绘的 Annotation —— 那等于又多一处要维护的坐标换算。
             UserAnnotation()
         }
         .mapStyle(.standard)
