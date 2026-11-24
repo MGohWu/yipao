@@ -91,6 +91,6 @@
 	     服务平台选「Web服务」。个人开发者免费，需实名认证。
 	     写入方式见 scripts/configure-signing.py 的 amap key 参数，别手改。 -->
 	<key>AMapWebKey</key>
-	<string></string>
+	<string>ef404dbfec31abaaefd5baae5b746614</string>
 </dict>
 </plist>
