@@ -807,8 +807,10 @@ struct VehicleState: Equatable {
     var hasTireWarning: Bool { tirePressures.contains { $0.warning } }
 
     // 位置
-    var latitude: Double? { double(.latitude) }
-    var longitude: Double? { double(.longitude) }
+    /// 车端上报的经纬度**原样**，未做任何换算。要显示、要算距离、要跳地图一律用
+    /// ``shareableCoordinate``，别用这两个——它们可能还是 WGS-84。
+    var latitude: Double? { coordinateReading?.coordinate.latitude }
+    var longitude: Double? { coordinateReading?.coordinate.longitude }
     var privacyGPSAllowed: Bool { bool(.privacyGPS) ?? true }
     var collectTime: String? { raw(.collectTime) }
     var totalMileage: Int? { int(.totalMileage) }
@@ -870,14 +872,39 @@ struct VehicleState: Equatable {
         return Calendar.current.date(from: components)
     }
 
+    /// 车端上报的第一组有效经纬度，附带它自己的坐标系口径。
+    ///
+    /// 不用 `raw(_:)` 那套「取第一个有值的 key」：经纬度是成对的，经度和纬度必须来自
+    /// 同一组，跨组拼出来的点会飞到几百公里外。所以这里按 `coordinateGroups` 整组整组地
+    /// 试，两组都齐了才算一个读数。
+    var coordinateReading: (coordinate: CLLocationCoordinate2D, datum: CoordinateDatum)? {
+        for group in schema.resolvedCoordinateGroups {
+            guard let latitudeText = signalMap[group.latitudeKey], !latitudeText.isEmpty,
+                  let longitudeText = signalMap[group.longitudeKey], !longitudeText.isEmpty,
+                  let latitude = Double(latitudeText), let longitude = Double(longitudeText)
+            else { continue }
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            guard CLLocationCoordinate2DIsValid(coordinate) else { continue }
+            return (coordinate, group.datum)
+        }
+        return nil
+    }
+
     /// 可以对外展示的车辆坐标。隐私模式下车端不给真实位置，非法值也一并挡掉。
     ///
-    /// **坐标系是 GCJ-02，车端原样，全端都不转**：大陆的苹果地图、系统定位、以及
-    /// 高德／百度／腾讯用的都是 GCJ-02，消费点一律直接用这个值（见 `CoordinateTransform`）。
+    /// **出口只有这一个，且交出去的永远是 GCJ-02**：大陆的苹果地图、系统定位、以及
+    /// 高德／百度／腾讯用的都是 GCJ-02。车端那几组原始坐标里只有 `2/3` 是 GCJ-02，
+    /// 其余是 WGS-84，在这一行转一次——**下游谁都不许再转**，转两遍同样偏半公里，
+    /// 方向还正好反过来（见 `CoordinateTransform`）。
     var shareableCoordinate: CLLocationCoordinate2D? {
-        guard privacyGPSAllowed, let latitude, let longitude else { return nil }
-        let value = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-        return CLLocationCoordinate2DIsValid(value) ? value : nil
+        guard privacyGPSAllowed, let reading = coordinateReading else { return nil }
+        switch reading.datum {
+        case .gcj02:
+            return reading.coordinate
+        case .wgs84:
+            let converted = CoordinateTransform.gcj02(fromWGS84: reading.coordinate)
+            return CLLocationCoordinate2DIsValid(converted) ? converted : nil
+        }
     }
 }
 

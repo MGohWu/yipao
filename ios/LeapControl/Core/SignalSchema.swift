@@ -281,17 +281,25 @@ struct SignalSchema: Equatable, Sendable {
     var windowScale: WindowScale = .invertedTen
     /// 这套体系的空调模式怎么读。
     var climateModeCoding: ClimateModeCoding = .legacy
+    /// 经纬度按**坐标系**分组，不是按候选顺序。
+    ///
+    /// `keys` 那一套「取第一个有值的」对普通信号成立，对经纬度不成立：同一帧里几组
+    /// 经纬度分属两套坐标系（GCJ-02 与 WGS-84），混着取就是一个固定几百米的偏移。
+    /// 所以坐标单独走这张表，由 `VehicleState.shareableCoordinate` 统一归一到 GCJ-02。
+    var coordinateGroups: [CoordinateGroup] = []
 
     init(
         id: String,
         keys: [VehicleSignal: [String]],
         windowScale: WindowScale = .invertedTen,
-        climateModeCoding: ClimateModeCoding = .legacy
+        climateModeCoding: ClimateModeCoding = .legacy,
+        coordinateGroups: [CoordinateGroup] = []
     ) {
         self.id = id
         self.keys = keys
         self.windowScale = windowScale
         self.climateModeCoding = climateModeCoding
+        self.coordinateGroups = coordinateGroups
     }
 
     /// 候选 key，按优先级排列。
@@ -299,6 +307,17 @@ struct SignalSchema: Equatable, Sendable {
 
     /// 兼容只关心「有没有映射」的地方。
     func key(for signal: VehicleSignal) -> String? { keys[signal]?.first }
+
+    /// 实际用于解析的一串坐标分组。
+    ///
+    /// 手工构造的 schema（测试、未知体系）没有分组表，这时按老口径当一组 GCJ-02 处理——
+    /// 「不做换算」是保守的那一边，不会平白把准的坐标推偏几百米。
+    var resolvedCoordinateGroups: [CoordinateGroup] {
+        if !coordinateGroups.isEmpty { return coordinateGroups }
+        guard let longitude = candidates(for: .longitude).first,
+              let latitude = candidates(for: .latitude).first else { return [] }
+        return [CoordinateGroup(longitudeKey: longitude, latitudeKey: latitude, datum: .gcj02)]
+    }
 
     /// 叠加本机标定学到的映射，标定结果优先。
     ///
@@ -314,9 +333,29 @@ struct SignalSchema: Equatable, Sendable {
             id: id + "+learned",
             keys: merged,
             windowScale: windowScale,
-            climateModeCoding: climateModeCoding
+            climateModeCoding: climateModeCoding,
+            coordinateGroups: coordinateGroups
         )
     }
+}
+
+/// 一组经纬度 key 的口径。
+///
+/// 车端同帧上报的几组经纬度**不是同一套坐标系**：一组是车机自己转好的 GCJ-02，
+/// 另外两组是 GPS 模块的原始 WGS-84。这层区分只在 `SignalSchema` 里声明一次，
+/// 换算收敛到 `VehicleState.shareableCoordinate` 一个出口，别在下游再转。
+struct CoordinateGroup: Equatable, Sendable {
+    let longitudeKey: String
+    let latitudeKey: String
+    let datum: CoordinateDatum
+}
+
+/// 坐标的坐标系。国内地图（苹果／高德／百度／腾讯）一律吃 GCJ-02。
+enum CoordinateDatum: String, Equatable, Sendable {
+    /// 国测局坐标，也叫「火星坐标」。国内地图底图用的就是它，可以直接上图。
+    case gcj02
+    /// GPS 原始坐标，全球统一。上图之前必须先转成 GCJ-02，否则偏几百米。
+    case wgs84
 }
 
 extension SignalSchema {
@@ -391,6 +430,10 @@ extension SignalSchema {
         .privacyGPS: ["privacyGPS"],
         .collectTime: ["collectTime"],
         .totalMileage: ["totalMileage"]
+    ], coordinateGroups: [
+        // S01/T03 只报这一组语义化字段名，没有可选组。口径按 GCJ-02 处理——
+        // 这套车一直是原样上图，从没人反馈过偏，动它就是拿所有人试错。
+        CoordinateGroup(longitudeKey: "longitude", latitudeKey: "latitude", datum: .gcj02)
     ])
 
     /// C11 及其余车型那套：数字信号 ID。S01 / T03 之外的车型都走这一张表——
@@ -468,17 +511,34 @@ extension SignalSchema {
         .leftRearTireState: ["2655"],
         .rightRearTireState: ["2662"],
 
-        // 经纬度。**2026-11-19 换组**：原先用的是和时间戳 `1` 连号的 `2` / `3`，
-        // 那组和车端另外两组经纬度在**同一帧里差着约 500 米**（实测 C16，经纬度已换成示例值：
-        // `2`=120.215527 / `3`=30.246109，而 `3724`=120.210009 / `3725`=30.24797、
-        // `2190`=120.210028 / `2191`=30.247968）。后两组彼此重合、只有 `2`/`3` 偏出去，
-        // 而官方 `LPNewStatusBinaryParser` 读的正是 `2190`/`2191` 那一路——
-        // 三份证据都指向 `2`/`3` 是偏的那一组，车辆位置、导航、近车判据一直偏半公里。
+        // 经纬度。**这里从来不是「哪组更可信」的问题，是坐标系问题。**
         //
-        // 候选顺序就是可信度顺序：`3724`/`3725` 优先，退 `2190`/`2191`，
-        // 最后才退回 `2`/`3`（只报老那组的车仍能显示位置，不至于整块空掉）。
-        .longitude: ["3724", "2190", "2"],
-        .latitude: ["3725", "2191", "3"],
+        // 同一帧里车端同时报三组（实测 C16，经纬度已换成示例值）：
+        //   `2`/`3`       = 120.215527 / 30.246109
+        //   `3724`/`3725` = 120.210009 / 30.24797
+        //   `2190`/`2191` = 120.210028 / 30.247968
+        // `3724/3725` 与 `2190/2191` 相差不到 2 米（同一路 GPS 的两份拷贝），
+        // `2/3` 与它们差 569 米（正东 530 米、正南 207 米）。
+        //
+        // **2026-11-19 那次换组把方向判反了。** 当时的理由是「后两组互相印证 + 官方
+        // `LPNewStatusBinaryParser` 读 `2190/2191`」，于是把 `3724/3725` 提到最前。
+        // 但「两组互相一致」只能说明它们同源，说明不了谁对：用 `CoordinateTransform`
+        // 的正向公式把 `3724/3725` 当 WGS-84 算一遍，落点离 `2/3` 只有 113 米
+        // （剩下的差是车机自己做过的道路吸附）；反过来把 `2/3` 当 WGS-84 算，
+        // 落点离 `3724/3725` 有 1079 米——正好是两倍偏移，也就是「转了两遍」的特征。
+        // 569 米这个量级和这个方向，就是杭州一带 WGS-84 → GCJ-02 的偏移本身。
+        // 结论：**`3724/3725`、`2190/2191` 是 GPS 原始 WGS-84；`2/3` 是车机已经转好的 GCJ-02。**
+        // （官方 App 读 WGS-84 那一路，是因为它交给高德 SDK 之前自己还要转一次。）
+        //
+        // 国内地图——苹果 MapKit、高德、百度、腾讯——全要 GCJ-02。所以：
+        // - `2/3` 优先，**原样**用；
+        // - 只报了 WGS-84 那两组的车，由 `VehicleState.shareableCoordinate` 统一转一次。
+        //
+        // 换组那版（1.1）正好反过来，把 WGS-84 原始坐标直接喂给了 GCJ-02 的底图，
+        // 于是**所有车、固定方向、固定半公里**地偏——这才是「全体用户都报偏」的形状，
+        // 和 `CoordinateTransform` 里记的那次回归是同一个坑的两种踩法。
+        .longitude: ["2", "3724", "2190"],
+        .latitude: ["3", "3725", "2191"],
 
         // 以下四项来自一次真车标定（开锁/开门/开尾门/降窗各做一次再复原），
         // 每一条都是正反两次值完全对调才采信的。
@@ -666,7 +726,15 @@ extension SignalSchema {
         // （见 `apk-analysis/sentinel-mode-interfaces.md` §3），是最贴车端的哨兵状态位。
         // 注意：这是**状态**位，和车辆的**支持判据**（`permission` 含 "400"）是两回事，别混。
         .sentinel: ["3636"]
-    ], windowScale: .percent, climateModeCoding: .numeric)
+    ], windowScale: .percent, climateModeCoding: .numeric, coordinateGroups: [
+        // 顺序即优先级。`2/3` 是车机已经转好的 GCJ-02（道路吸附过，最贴近「车停在哪个
+        // 车位」），可以原样上图；后两组是 GPS 原始 WGS-84，只报它们的时候才用，
+        // 且必须由 `VehicleState.shareableCoordinate` 转一次再给地图。
+        // 三组的来历和判据写在上面 `.longitude` / `.latitude` 那一段。
+        CoordinateGroup(longitudeKey: "2", latitudeKey: "3", datum: .gcj02),
+        CoordinateGroup(longitudeKey: "3724", latitudeKey: "3725", datum: .wgs84),
+        CoordinateGroup(longitudeKey: "2190", latitudeKey: "2191", datum: .wgs84)
+    ])
 
     /// 认不出来的体系。取值全部返回 nil，界面老实显示占位符。
     static let unknown = SignalSchema(id: "unknown", keys: [:])
@@ -689,7 +757,8 @@ extension SignalSchema {
                 id: "legacy-t03",
                 keys: legacy.keys,
                 windowScale: .percent,
-                climateModeCoding: legacy.climateModeCoding
+                climateModeCoding: legacy.climateModeCoding,
+                coordinateGroups: legacy.coordinateGroups
             )
         }
         let numericKeys = signalMap.keys.count { $0.allSatisfy(\.isNumber) }

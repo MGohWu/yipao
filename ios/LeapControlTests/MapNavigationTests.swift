@@ -5,7 +5,7 @@ import Testing
 
 /// 「导航到车辆」跳第三方地图时的坐标系口径。
 ///
-/// 车端给的是 GCJ-02（判据见 `AvailableMapApp.url(for:name:)` 的注释）。四家声明
+/// 传进去的是 GCJ-02（`VehicleState.shareableCoordinate` 的出口，判据见 `AvailableMapApp.url(for:name:)` 的注释）。四家声明
 /// 坐标系的方式各不相同，写错了**照样编译、照样能跳过去**，只是落点偏出几百米——
 /// 而这件事只有站在车边打开导航才会发现。所以逐个钉死在这儿。
 ///

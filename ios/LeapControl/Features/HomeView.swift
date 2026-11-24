@@ -4,7 +4,8 @@ import UIKit
 
 /// 首页的地图缩略图。不可交互，点整张卡片进详情页。
 struct LocationThumbnail: View {
-    /// 车端原样的 **GCJ-02**，不转——大陆的 MapKit 底图就是 GCJ-02（见 `CoordinateTransform`）。
+    /// **GCJ-02**，`VehicleState.shareableCoordinate` 已经归一好了，这里（以及任何渲染层）
+    /// 都不许再转——大陆的 MapKit 底图就是 GCJ-02（见 `CoordinateTransform`）。
     var coordinate: CLLocationCoordinate2D?
 
     var body: some View {

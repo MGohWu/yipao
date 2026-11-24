@@ -5,10 +5,10 @@ import Testing
 
 /// GCJ-02 ↔ WGS-84 换算的数学正确性。
 ///
-/// **注意：`CoordinateTransform` 目前在生产代码里没有调用方**——大陆的苹果地图、系统定位
-/// 和国内三家地图用的都是 GCJ-02，车端坐标一律原样传（原委见 `CoordinateTransform` 的
-/// 头注释）。这组测试保的是「万一哪天真拿到 WGS-84 坐标，这个换算本身是对的」，
-/// 它通过**不代表**该把换算接回渲染链路上去。
+/// **注意：`CoordinateTransform` 在生产代码里只有一个调用方**——`VehicleState.shareableCoordinate`，
+/// 且只在「车只报了 `3724/3725` 或 `2190/2191` 这两组 WGS-84 原始坐标」时才转。`2/3` 本来就是
+/// GCJ-02，原样上图（原委见 `CoordinateTransform` 头注释）。这组测试保的是「换算本身是对的」：
+/// 它通过**不代表**该往渲染链路里加调用点，多转一次照样偏半公里。
 @Suite("坐标系换算")
 struct CoordinateTransformTests {
 

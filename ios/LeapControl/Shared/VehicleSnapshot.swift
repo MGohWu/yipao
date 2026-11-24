@@ -373,7 +373,19 @@ struct VehicleSnapshot: Codable, Equatable, Sendable {
 /// 快照存放在 App Group 容器里，卡片进程才读得到。
 /// 这里只放非敏感的展示数据——token 和操作密码始终留在 Keychain，不进这个文件。
 struct SnapshotStore: Sendable {
-    static let appGroup = "group.org.yipao.app"
+    /// App Group 标识。
+    ///
+    /// **优先读 Info.plist 里的 `YPAppGroup`**：这个字符串是编译进二进制的常量，而 App Group
+    /// 又必须在开发者账号里注册过、且主 App 与小组件两条 entitlement 完全一致，重签一份别人
+    /// 构建的 IPA 时几乎一定要换名字。让它可被 Info.plist 覆盖，重签工具改 plist 就能对齐，
+    /// 不用回头改源码重编。两处都没有时退回工程默认值。
+    static let appGroup: String = {
+        if let override = Bundle.main.object(forInfoDictionaryKey: "YPAppGroup") as? String,
+           !override.isEmpty {
+            return override
+        }
+        return "group.org.yipao.app"
+    }()
     /// 车辆状态卡片（小/中/大 + 三种锁屏样式）。
     static let widgetKind = "LeapVehicleWidget"
     /// 只管锁车的单功能卡片（仅小尺寸）。

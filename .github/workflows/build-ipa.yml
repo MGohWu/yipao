@@ -1,0 +1,110 @@
+# 在 GitHub 的 macOS 跑一次「编译 + 打包 unsigned IPA」，产物从 Artifacts 下载。
+#
+# 为什么要有这条流水线：iOS 的二进制只能在 macOS + Xcode 上编出来，Windows/Linux 上没有任何
+# 合法办法交叉编译。把这一步放到免费的 macOS runner 上，没有 Mac 也能出包——点一次按钮，
+# 三到五分钟拿到 ipa，自己用证书签。
+#
+# 用法：
+#   1. Fork 或在你的仓库里启用 Actions；
+#   2. Actions → Build unsigned IPA → Run workflow；
+#   3. 填你的 Team ID / Bundle ID / App Group（不填就用仓库默认值）；
+#   4. 跑完在这条 run 页面底部 Artifacts 下载 Yipao-iOS-unsigned。
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      team_id:
+        description: "Apple Team ID（10 位，可留空）"
+        required: false
+        default: ""
+      bundle_id:
+        description: "主 App 的 Bundle ID（留空用仓库默认值 org.yipao.app）"
+        required: false
+        default: ""
+      app_group:
+        description: "App Group（留空用仓库默认值 group.org.yipao.app）"
+        required: false
+        default: ""
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      # 不写死 Xcode 版本：这个 App 用到了 iOS 26 的 API（`MKMapItem(location:address:)`），
+      # 需要较新的 SDK；用最新那个就行，也别因为 runner 镜像更新就整条流水线挂掉。
+      - name: 选择最新的 Xcode
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "使用 $latest"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      - name: 安装 xcodegen
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: 对齐签名配置
+        if: ${{ inputs.team_id != '' || inputs.bundle_id != '' || inputs.app_group != '' }}
+        working-directory: ios
+        env:
+          TEAM_ID: ${{ inputs.team_id }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+          APP_GROUP: ${{ inputs.app_group }}
+        run: |
+          set -euo pipefail
+          args=()
+          [ -n "$TEAM_ID" ] && args+=(--team "$TEAM_ID")
+          [ -n "$BUNDLE_ID" ] && args+=(--bundle-id "$BUNDLE_ID")
+          [ -n "$APP_GROUP" ] && args+=(--app-group "$APP_GROUP")
+          python3 scripts/configure-signing.py "${args[@]}"
+
+      - name: 编译（不签名）
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          chmod +x scripts/build-ipa.sh
+          OUTPUT="$PWD/build/Yipao-iOS-unsigned.ipa" ./scripts/build-ipa.sh
+
+      - name: 核对产物里该有的东西
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          ipa=build/Yipao-iOS-unsigned.ipa
+          test -f "$ipa"
+          rm -rf build/verify && mkdir -p build/verify
+          cd build/verify
+          unzip -q "../Yipao-iOS-unsigned.ipa"
+          app="Payload/LeapControl.app"
+          test -d "$app" || { echo "缺少主 App"; exit 1; }
+          test -d "$app/PlugIns/LeapWidget.appex" || { echo "缺少小组件扩展"; exit 1; }
+          test ! -d "$app/_CodeSignature" || { echo "不该带签名"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Print :NSSupportsLiveActivities" "$app/Info.plist"
+          echo "--- Bundle ID ---"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/PlugIns/LeapWidget.appex/Info.plist"
+          echo "--- App Group ---"
+          /usr/libexec/PlistBuddy -c "Print :YPAppGroup" "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :YPAppGroup" "$app/PlugIns/LeapWidget.appex/Info.plist"
+          echo "--- 扩展点 ---"
+          /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" \
+            "$app/PlugIns/LeapWidget.appex/Info.plist"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yipao-iOS-unsigned
+          path: ios/build/Yipao-iOS-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30

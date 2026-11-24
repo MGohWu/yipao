@@ -15,8 +15,8 @@ struct VehicleLocationView: View {
     @State private var isLoadingParkingPhoto = false
     @State private var isShowingParkingPhoto = false
 
-    /// 车端原样的 GCJ-02。这一页所有用到坐标的地方——地图、两个距离、跳各家地图——
-    /// 都用它，不转（见 `CoordinateTransform`）。
+    /// 已经是 GCJ-02（`VehicleState.shareableCoordinate` 转过的那一个）。这一页所有用到
+    /// 坐标的地方——地图、两个距离、跳各家地图——都用它，**不许再转**（见 `CoordinateTransform`）。
     private var coordinate: CLLocationCoordinate2D? { store.coordinate }
 
     var body: some View {
@@ -204,7 +204,7 @@ struct VehicleLocationView: View {
 
     private var straightDistanceText: String {
         // 两边都是 GCJ-02：在中国大陆 `CLLocationManager` 返回的就是加过偏的 GCJ-02，
-        // 车端上报的也是。谁被单独转一次，人站在车边上都会显示几百米。
+        // 车端坐标也已经归一过。谁被单独转一次，人站在车边上都会显示几百米。
         guard let vehicle = coordinate, let user = userLocation.location else { return "定位中" }
         return formatDistance(CLLocation(latitude: vehicle.latitude, longitude: vehicle.longitude)
             .distance(from: user))
@@ -396,9 +396,9 @@ enum AvailableMapApp: String, CaseIterable, Identifiable {
     private var scheme: String {
         switch self { case .apple: "maps"; case .amap: "iosamap"; case .baidu: "baidumap"; case .tencent: "qqmap" }
     }
-    /// 车端给的坐标是 **GCJ-02**（国测局／「火星坐标」），这里三家的参数都按这个口径写，
-    /// 所以传进来的必须是**没转换过**的车端原始坐标。苹果地图那条也一样，见
-    /// `CoordinateTransform` 里为什么大陆不需要转。
+    /// 传进来的是 **GCJ-02**（国测局／「火星坐标」，`shareableCoordinate` 的出口），
+    /// 三家的参数都按这个口径写，所以这里不许再转。苹果地图那条也一样，见
+    /// `CoordinateTransform`。
     ///
     /// **每家声明坐标系的方式都不一样，这里逐个写死，别照抄别处的模板：**
     /// - 高德 `dev`：0 = 我给的是高德坐标（GCJ-02），1 = GPS 原始坐标（WGS-84）。

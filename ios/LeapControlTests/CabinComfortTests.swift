@@ -398,14 +398,16 @@ struct CabinComfortTests {
 
     // MARK: - 顺手修掉的三处
 
-    @Test("经纬度优先读 3724/3725，不再读偏 500 米的 2/3")
-    func locationPrefersVerifiedSignals() {
+    @Test("经纬度取 GCJ-02 那组（2/3），不再把 WGS-84 原始坐标直接上图")
+    func locationUsesGCJ02Pair() {
         let s = state(c16)
-        // 三组同时在场时取官方那一路
-        #expect(s.longitude == 120.210009)
-        #expect(s.latitude == 30.24797)
+        // 三组同时在场：`2/3` 是车机转好的 GCJ-02，原样用，不转。
+        #expect(s.latitude == 30.246109)
+        #expect(s.longitude == 120.215527)
+        #expect(s.shareableCoordinate?.latitude == 30.246109)
+        #expect(s.shareableCoordinate?.longitude == 120.215527)
 
-        // 只报老那组的车仍然显示位置，不至于整块空掉
+        // 只报老那组的车仍然显示位置，不至于整块空掉。
         var onlyLegacyPair = c16
         for key in ["3724", "3725", "2190", "2191"] { onlyLegacyPair[key] = nil }
         #expect(state(onlyLegacyPair).longitude == 120.215527)

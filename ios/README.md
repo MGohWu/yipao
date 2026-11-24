@@ -45,8 +45,19 @@ Vendor/GmSSL/      GmSSL 预编译库
 | --- | --- | --- |
 | Apple Team ID | `project.yml` 里的 `DEVELOPMENT_TEAM` | 仓库里留空。只在模拟器上跑可以不填；装真机必须填你自己的 Team ID，或者生成工程后在 Xcode 的 Signing & Capabilities 里选择。 |
 | Bundle ID | `project.yml` 各 target 的 `PRODUCT_BUNDLE_IDENTIFIER` | 默认 `org.yipao.app`（主 App）、`org.yipao.app.widget`（小组件）、`org.yipao.app.tests`。Bundle ID 全局唯一，用自己的账号签名时多半要改成你自己的前缀。 |
-| App Group | `LeapControl/LeapControl.entitlements`、`LeapWidget/LeapWidget.entitlements`、`LeapControl/Shared/VehicleSnapshot.swift` 里的 `SnapshotStore.appGroup` | 默认 `group.org.yipao.app`。三处必须一致，改 Bundle ID 时一起改。 |
+| App Group | 两份 `.entitlements`、两份 `Info.plist` 的 `YPAppGroup`、`VehicleSnapshot.swift` 里的兜底常量 | 默认 `group.org.yipao.app`。**四处必须一致**，还要在开发者后台注册并在两个 App ID 上都勾上。 |
 | 钥匙串共享组 | 两份 entitlements 里的 `keychain-access-groups` | 默认 `$(AppIdentifierPrefix)org.yipao.app`，App 与小组件必须相同。 |
+
+上面这几项不要手改——**一条命令改齐**：
+
+```bash
+cd ios
+python3 scripts/configure-signing.py --team ABCDE12345 \
+    --bundle-id com.example.yipao --app-group group.com.example.yipao
+```
+
+它会改完 6 个文件并校验 App Group 四处逐字一致。自签之后小组件和灵动岛怎么才能不掉，
+见 [`SIGNING.md`](SIGNING.md)。
 
 iOS 端用的是系统 MapKit，不需要地图 SDK key。
 
@@ -72,6 +83,20 @@ xcodebuild -project LeapControl.xcodeproj -scheme LeapControl \
 ```
 
 首次装到真机后，可能需要在 iPhone 的「设置 → 通用 → VPN 与设备管理」里信任开发者证书。
+
+### 只出一个未签名的 IPA（给 Sideloadly / AltStore 用）
+
+```bash
+cd ios
+./scripts/build-ipa.sh            # 产物：ios/build/Yipao-iOS-unsigned.ipa
+```
+
+脚本会先 `xcodegen generate`，再以 `CODE_SIGNING_ALLOWED=NO` 打包 `Release` 归档，
+把扩展一起塞进 `Payload` 并校验 `NSSupportsLiveActivities` 与 `PlugIns/LeapWidget.appex`。
+没有 Mac 的话，仓库根目录的 `.github/workflows/build-ipa.yml` 可以在 GitHub 的 macOS
+runner 上跑同一套流程，产物从 Actions 的 Artifacts 下载。
+
+签名步骤、以及重签后为什么小组件会失效、怎么查，见 [`SIGNING.md`](SIGNING.md)。
 
 ### 本地预览（仅 Debug）
 

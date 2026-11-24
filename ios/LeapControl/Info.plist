@@ -79,5 +79,11 @@
 		<string>baidumap</string>
 		<string>qqmap</string>
 	</array>
+	<!-- App Group 标识，主 App 与小组件必须**逐字相同**，也必须和两份 entitlements、
+	     以及开发者账号里注册的那个 App Group 一致。写在这里是为了让重签一份别人构建的
+	     IPA 时能只改 plist 就对齐（`SnapshotStore.appGroup` 优先读这一项），
+	     默认值见 `LeapControl.entitlements`。 -->
+	<key>YPAppGroup</key>
+	<string>group.org.yipao.app</string>
 </dict>
 </plist>

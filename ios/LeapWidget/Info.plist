@@ -9,5 +9,9 @@
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.widgetkit-extension</string>
 	</dict>
+	<!-- 扩展进程里 `Bundle.main` 是这个 appex，所以这一项必须和主 App 那份**逐字相同**，
+	     否则卡片读不到共享容器（表现是卡片一直显示占位数据，App 里却一切正常）。 -->
+	<key>YPAppGroup</key>
+	<string>group.org.yipao.app</string>
 </dict>
 </plist>

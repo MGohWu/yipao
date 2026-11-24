@@ -790,11 +790,12 @@ final class VehicleStore {
         LeapWidgets.reloadVehicleSurfaces()
     }
 
-    /// 车辆坐标，**车端原样的 GCJ-02**，隐私模式下拿不到。
+    /// 车辆坐标，**已经归一到 GCJ-02**，隐私模式下拿不到。
     ///
     /// 全端只有这一个坐标口径，不要再派生第二个：在中国大陆，苹果地图（MapKit）和
     /// 系统定位（CoreLocation）用的都是 GCJ-02，跳高德／百度／腾讯要的也是 GCJ-02，
-    /// 所有消费点原样用这一个值。为什么不能转见 `CoordinateTransform`。
+    /// 所有消费点原样用这一个值。车端那几组原始坐标里的 WGS-84 已经在
+    /// `VehicleState.shareableCoordinate` 转过一次了，这里不许再转。
     var coordinate: CLLocationCoordinate2D? { state?.shareableCoordinate }
 
     /// 把坐标换成"杭州市滨江区江陵路"这类地址，失败时不显示任何回退坐标。
