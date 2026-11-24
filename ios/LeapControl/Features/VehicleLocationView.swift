@@ -225,8 +225,21 @@ struct VehicleLocationView: View {
     ///
     /// 有来源就一直显示：车主知道这一格是高德给的还是苹果给的，本身就值这个像素。
     private var drivingMetricTitle: String {
-        guard let route = drivingRoute else { return "驾车距离" }
-        return "驾车距离 · \(route.source.label)"
+        guard let route = drivingRoute else { return routeMode.title }
+        return "\(routeMode.title) · \(route.source.label)"
+    }
+
+    /// 这一格该按步行还是按驾车算。
+    ///
+    /// 找自己的车，人是走过去的，所以近距离一律按步行——车停进巷子、单行道里侧时，
+    /// 驾车会绕出一倍的距离（实测同一对点步行 363 米、驾车 1486 米），那不是用户要的答案。
+    /// 判据只用直线距离，不依赖任何网络结果，所以这个值在算路之前就已经定了。
+    private var routeMode: TravelMode {
+        guard let user = userLocation.location, let vehicle = coordinate else { return .walking }
+        let straight = user.distance(
+            from: CLLocation(latitude: vehicle.latitude, longitude: vehicle.longitude)
+        )
+        return TravelMode.preferred(forStraightDistance: straight)
     }
 
     private var drivingDistanceText: String {
@@ -262,16 +275,24 @@ struct VehicleLocationView: View {
             drivingRouteUnavailable = false
             return
         }
-        let route = await DrivingRouteService.route(from: user.coordinate, to: vehicle)
+        let mode = TravelMode.preferred(
+            forStraightDistance: user.distance(
+                from: CLLocation(latitude: vehicle.latitude, longitude: vehicle.longitude)
+            )
+        )
+        let route = await DrivingRouteService.route(from: user.coordinate, to: vehicle, mode: mode)
         // 人挪了或车报了新坐标时，`.task(id:)` 会把上一次取消掉。被取消的那次回得晚，
         // 结果不能盖掉新的——否则界面上会留在旧位置上，看着像「距离不跟着变」。
         guard !Task.isCancelled else { return }
         drivingRoute = route
         drivingRouteUnavailable = route == nil
         if let route {
-            BLEDiagnostics.record("route", "驾车 \(Int(route.distance))m/\(Int(route.duration))s 来源=\(route.source.label)")
+            BLEDiagnostics.record(
+                "route",
+                "\(mode.title) \(Int(route.distance.rounded()))m/\(Int(route.duration))s 来源=\(route.source.label)"
+            )
         } else {
-            BLEDiagnostics.record("route", "驾车路线算不出来（高德/苹果都没给）")
+            BLEDiagnostics.record("route", "路线算不出来（高德/苹果都没给） mode=\(mode)"
         }
     }
 
