@@ -84,6 +84,6 @@
 	     IPA 时能只改 plist 就对齐（`SnapshotStore.appGroup` 优先读这一项），
 	     默认值见 `LeapControl.entitlements`。 -->
 	<key>YPAppGroup</key>
-	<string>group.org.yipao.app</string>
+	<string>group.ab6938971b3fa793.1</string>
 </dict>
 </plist>

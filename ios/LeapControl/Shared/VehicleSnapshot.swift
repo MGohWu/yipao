@@ -384,7 +384,7 @@ struct SnapshotStore: Sendable {
            !override.isEmpty {
             return override
         }
-        return "group.org.yipao.app"
+        return "group.ab6938971b3fa793.1"
     }()
     /// 车辆状态卡片（小/中/大 + 三种锁屏样式）。
     static let widgetKind = "LeapVehicleWidget"

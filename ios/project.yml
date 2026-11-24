@@ -1,6 +1,6 @@
 name: LeapControl
 options:
-  bundleIdPrefix: org.yipao
+  bundleIdPrefix: app.silver9175
   deploymentTarget:
     iOS: "18.2"
   createIntermediateGroups: true
@@ -17,7 +17,7 @@ settings:
     # 填你自己的 Apple Team ID（10 位），见 README「签名」。
     # 命令行/CI 里可以直接覆盖：xcodebuild ... DEVELOPMENT_TEAM=ABCDE12345
     # 一次性把 Team / Bundle ID / App Group 全对齐用 `scripts/configure-signing.py`。
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "FTL7Y6J897"
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
@@ -30,7 +30,7 @@ targets:
       - path: LeapControl
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.yipao.app
+        PRODUCT_BUNDLE_IDENTIFIER: app.silver9175.tomato8924
         PRODUCT_NAME: LeapControl
         INFOPLIST_FILE: LeapControl/Info.plist
         # 让 Xcode 把 CFBundleIdentifier 等标准键合并进上面这份手写 plist。
@@ -64,7 +64,7 @@ targets:
       - path: LeapControl/Core
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.yipao.app.widget
+        PRODUCT_BUNDLE_IDENTIFIER: app.silver9175.tomato8924.widget
         PRODUCT_NAME: LeapWidget
         INFOPLIST_FILE: LeapWidget/Info.plist
         GENERATE_INFOPLIST_FILE: YES
@@ -88,7 +88,7 @@ targets:
       - target: LeapControl
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.yipao.app.tests
+        PRODUCT_BUNDLE_IDENTIFIER: app.silver9175.tomato8924.tests
         GENERATE_INFOPLIST_FILE: YES
 
 # 显式声明 scheme，xcodegen 会把它写进 xcshareddata/xcschemes（shared）。
