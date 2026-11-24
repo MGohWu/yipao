@@ -1,0 +1,9 @@
+# 脚本和工程文件一律用 LF，别跟 Windows 的换行转换打架。
+# `core.autocrlf=true` 的机器上，.sh 一旦被检出成 CRLF，在 macOS/Linux 上会报
+# "bad interpreter: /usr/bin/env bash^M"，而且看起来完全像脚本本身写错了。
+* text=auto
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.swift text eol=lf
