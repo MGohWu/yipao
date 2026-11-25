@@ -1,23 +1,37 @@
 import CoreLocation
 import Foundation
 
+/// 一条记录的来源。三种，界面上的标签和可信度都由它决定。
+enum TripSource: String, Codable, Hashable, Sendable {
+    /// 本机轮询看着车况切出来的。时间准，距离可能差一点。
+    case recorded
+    /// 补记：App 没在跑的那段路，用前后两次看到的里程表差估算的。时间和距离都粗。
+    case reconstructed
+    /// 零跑云端的逐趟记录（`CloudTripRecord`）。App 开没开都有，官方 App 显示的就是这些数。
+    case official
+}
+
 /// 一次行程：从「车动了」到「车停下」，中间的红灯、等人都不切段。
 ///
-/// **数据是我们自己看着车况攒出来的**，不是零跑云端给的。官方的「行程能耗」只到「天」
-/// （累计里程、周能耗、近 7 日按天统计），没有逐趟明细；云端 `drivingrecord` 命名空间里
-/// 那几个接口（`mileage/energy/detail`、`getLastweekEC`…）也都是按天/按周聚合的。
-/// 所以逐趟记录只能靠 App 在运行时按 10 秒一次的轮询自己切段（见 `TripTracker`）。
+/// 数据有**两个来源**，合并成一份列表：
 ///
-/// 由此带来一个必须写在界面上的限制：**App 没运行时看不到车**，那段路只能靠前后两次
-/// 里程表的差补一条 `isReconstructed` 的记录，时间和路线都不精确。宁可标出来，也不假装
-/// 它是精确的——车主一对账就会发现对不上，那时候再解释就晚了。
+/// 1. 本机轮询切出来的（`TripTracker`，`source == .recorded`）。它看得见坐标、起终点地名、
+///    电量变化，但只在 App 活着的时候存在。
+/// 2. 零跑云端自己的逐趟明细（`CloudTripRecord`，`source == .official`）。它覆盖 App 没开
+///    的那段时间，距离和耗电是官方的口径，只是没有经纬度。
+///
+/// 两者重叠的那一趟由 `CloudTripMerge` 认出来并合成一条：时间用本机的，数字用官方的。
+/// 剩下的补记（`source == .reconstructed`）只在官方也没有那段数据时才留着。
+///
+/// 因此界面不能再写「记录在本机、App 没开就记不到」——那句话在接上云端之后是错的。
 struct TripRecord: Codable, Identifiable, Hashable, Sendable {
     var id: UUID
     /// 哪台车。多车账号切车之后，列表不能把两台车的行程混在一起算汇总。
     var vin: String?
     var startAt: Date
     var endAt: Date
-    /// 公里。取「里程表差」与「轨迹累加」里大的那个，理由见 `TripTracker.finish`。
+    /// 公里。本机记录取「里程表差」与「轨迹累加」里大的那个（见 `TripTracker.finish`）；
+    /// 认出来的官方记录用云端的数。
     var distanceKm: Double
     var startSoc: Int?
     var endSoc: Int?
@@ -28,8 +42,21 @@ struct TripRecord: Codable, Identifiable, Hashable, Sendable {
     /// 起终点地名。进列表时异步补，补到就回写文件，补不到就一直留空。
     var startPlace: String?
     var endPlace: String?
-    /// 补记：App 没在跑的那段路，用前后两次看到的里程表差补出来的一条。
-    var isReconstructed: Bool
+    var source: TripSource
+    /// 云端那条记录的主键。有了它，重复同步就是幂等的。
+    var officialKey: String?
+    /// 官方口径的这一趟用了多少度电。
+    var energyKWh: Double?
+    /// 官方口径的最高车速（本机拿不到车速信号）。
+    var maxSpeedKmh: Int?
+    /// 增程车这一趟烧的油（升）。
+    var fuelLitres: Double?
+
+    /// 补记。老代码和界面都用这个名字，别改成 `source == .reconstructed` 到处散开。
+    var isReconstructed: Bool { source == .reconstructed }
+
+    /// 这一趟有没有官方数据。界面据此打「官方」标、显示度数。
+    var hasOfficialData: Bool { officialKey != nil }
 
     init(
         id: UUID = UUID(),
@@ -43,7 +70,8 @@ struct TripRecord: Codable, Identifiable, Hashable, Sendable {
         end: CLLocationCoordinate2D? = nil,
         startPlace: String? = nil,
         endPlace: String? = nil,
-        isReconstructed: Bool = false
+        isReconstructed: Bool = false,
+        source: TripSource? = nil
     ) {
         self.id = id
         self.vin = vin
@@ -58,7 +86,73 @@ struct TripRecord: Codable, Identifiable, Hashable, Sendable {
         self.endLongitude = end?.longitude
         self.startPlace = startPlace
         self.endPlace = endPlace
-        self.isReconstructed = isReconstructed
+        self.source = source ?? (isReconstructed ? .reconstructed : .recorded)
+    }
+
+    // MARK: - 落盘兼容
+    //
+    // 1.8 之前写下的 `trip-log.json` 里没有 `source` / `officialKey` / 度数这些键。
+    // 用合成的 Codable 会因为缺键整份解不出来——那等于用户升级一次就丢光历史记录。
+    // 所以解码全部走 `decodeIfPresent`，缺什么补什么：
+    // 缺 `source` 就看老字段 `isReconstructed`。
+
+    private enum CodingKeys: String, CodingKey {
+        case id, vin, startAt, endAt, distanceKm, startSoc, endSoc
+        case startLatitude, startLongitude, endLatitude, endLongitude
+        case startPlace, endPlace, source, officialKey
+        case energyKWh, maxSpeedKmh, fuelLitres
+        case isReconstructed
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        vin = try container.decodeIfPresent(String.self, forKey: .vin)
+        startAt = try container.decode(Date.self, forKey: .startAt)
+        endAt = try container.decode(Date.self, forKey: .endAt)
+        distanceKm = try container.decodeIfPresent(Double.self, forKey: .distanceKm) ?? 0
+        startSoc = try container.decodeIfPresent(Int.self, forKey: .startSoc)
+        endSoc = try container.decodeIfPresent(Int.self, forKey: .endSoc)
+        startLatitude = try container.decodeIfPresent(Double.self, forKey: .startLatitude)
+        startLongitude = try container.decodeIfPresent(Double.self, forKey: .startLongitude)
+        endLatitude = try container.decodeIfPresent(Double.self, forKey: .endLatitude)
+        endLongitude = try container.decodeIfPresent(Double.self, forKey: .endLongitude)
+        startPlace = try container.decodeIfPresent(String.self, forKey: .startPlace)
+        endPlace = try container.decodeIfPresent(String.self, forKey: .endPlace)
+        if let stored = try container.decodeIfPresent(TripSource.self, forKey: .source) {
+            source = stored
+        } else {
+            let legacy = try container.decodeIfPresent(Bool.self, forKey: .isReconstructed) ?? false
+            source = legacy ? .reconstructed : .recorded
+        }
+        officialKey = try container.decodeIfPresent(String.self, forKey: .officialKey)
+        energyKWh = try container.decodeIfPresent(Double.self, forKey: .energyKWh)
+        maxSpeedKmh = try container.decodeIfPresent(Int.self, forKey: .maxSpeedKmh)
+        fuelLitres = try container.decodeIfPresent(Double.self, forKey: .fuelLitres)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(vin, forKey: .vin)
+        try container.encode(startAt, forKey: .startAt)
+        try container.encode(endAt, forKey: .endAt)
+        try container.encode(distanceKm, forKey: .distanceKm)
+        try container.encodeIfPresent(startSoc, forKey: .startSoc)
+        try container.encodeIfPresent(endSoc, forKey: .endSoc)
+        try container.encodeIfPresent(startLatitude, forKey: .startLatitude)
+        try container.encodeIfPresent(startLongitude, forKey: .startLongitude)
+        try container.encodeIfPresent(endLatitude, forKey: .endLatitude)
+        try container.encodeIfPresent(endLongitude, forKey: .endLongitude)
+        try container.encodeIfPresent(startPlace, forKey: .startPlace)
+        try container.encodeIfPresent(endPlace, forKey: .endPlace)
+        try container.encode(source, forKey: .source)
+        try container.encodeIfPresent(officialKey, forKey: .officialKey)
+        try container.encodeIfPresent(energyKWh, forKey: .energyKWh)
+        try container.encodeIfPresent(maxSpeedKmh, forKey: .maxSpeedKmh)
+        try container.encodeIfPresent(fuelLitres, forKey: .fuelLitres)
+        // 老字段照写：万一有人回滚到 1.8，那份代码还看得懂「这是补记」。
+        try container.encode(isReconstructed, forKey: .isReconstructed)
     }
 
     var startCoordinate: CLLocationCoordinate2D? {
@@ -139,21 +233,28 @@ enum TripLogStore {
 }
 
 /// 把一串车况采样切成一段段行程。**纯逻辑，不碰网络、不碰文件、不碰 UI**，
-/// 所以能在测试里把「等红灯」「App 被杀」「里程表跳变」这些情形一条条摆出来跑。
+/// 所以能在测试里把「等红灯」「在路边等人」「App 被杀」「里程表跳变」这些情形一条条摆出来跑。
 ///
-/// 判定口径（借鉴 `ProtossBlaster/leapmotor-mate` 的 poller 状态机，按手机端的条件改过）：
+/// 判定口径来自 `pipipiper/leapmotor-mate-cn` 的 poller 状态机（一个跑了很久、被上百条
+/// 实车测试钉住的开源项目），按手机端拿得到的信号改过：
 ///
 /// - **开始**：挡位报 D/R（`VehicleState.isDriving`）就算开始。读不到挡位的车型用位移兜底：
-///   相邻两帧相距 80 米以上、且间隔不超过 3 分钟。
-/// - **结束**：连续 3 帧（30 秒）既不是行车、里程表也没动。用「连续」而不是「一帧」，
-///   是因为锁车、上电、GPS 抖动都会让某一帧的挡位瞬间读不到，一帧就切会把一趟路切成一堆碎片。
-///   mate 那边用的是 P 档连续 6 帧（约 1 分钟）+ READY 熄灭，我们只有 10 秒轮询、且不是常驻，
-///   30 秒是能拿到的最稳的折中。
-/// - **太短的不算**：不足 0.3 公里且里程表没跳字的，直接丢——挪个车位、洗车挪两米都会触发一次
-///   「开始→结束」，全留下的话列表第一天就被这种记录淹了（mate 的阈值是 200 米，同一量级）。
+///   相邻两帧相距 80 米以上、且间隔不超过 3 分钟。插着充电枪时不开始——那是在充电，不是出发。
+/// - **结束**要过三道关，缺一不可：
+///   1. **停够时间**：连续停着（不动、里程表也不动）满 60 秒。
+///   2. **车要么熄火、要么一直没熄**：如果车还报「上电/READY」（信号 1258），说明人是
+///      停在路边等人、取快递、接孩子——这一趟还没结束，只是中间停了一下。这时候收尾会把
+///      一次出门拆成两趟，而云端是按「上电到断电」算一趟的，拆开之后两边都对不上账。
+///      只有在 READY 一直亮着超过 4 小时（谁也不至于在车上等这么久）才强制收尾。
+///   3. **没在充电**：枪一插进来就收尾，一次充电不该算在行驶时间里。
+/// - **收入时刻**取「最后一次看到车在动」的那一帧，不是收尾的那一帧：中间停在路边等的那
+///   十分钟不该算成行驶时间。
+/// - **太短的不算**：不足 0.2 公里且里程表没跳字的，直接丢——挪个车位、洗车挪两米都会触发
+///   一次「开始→结束」（mate 的阈值也是 200 米）。
 /// - **断档**：两帧间隔超过 10 分钟，说明 App 中途被挂起或杀掉。这时不能把中间那段时间算进
 ///   进行中的行程（会把停车等待算成行驶），要先把行程结束在**上一帧的时刻**，再用里程表差
-///   补一条 `isReconstructed`。补记只在没有进行中行程时做，避免和真实行程重复记账。
+///   补一条 `isReconstructed`。不过现在有云端那 30 天的逐趟明细兜底（`CloudTripMerge`），
+///   这段补记只在云端也没有对应记录时才留在列表里。
 struct TripTracker {
     struct Sample {
         var at: Date
@@ -164,12 +265,24 @@ struct TripTracker {
         var coordinate: CLLocationCoordinate2D?
         /// 挡位报的是不是 D/R。读不到挡位的车型传 false，交给位移兜底。
         var gearDriving: Bool
+        /// 车是不是还上着电（信号 1258「READY」）。读不到就是 nil，退回纯时间判定。
+        var poweredOn: Bool? = nil
+        /// 充电枪插上了没有。插枪意味着这一趟结束了。
+        var cableIn: Bool? = nil
     }
 
-    /// 连续多少帧「停着」才结束行程。10 秒一帧 → 30 秒。
-    static let parkedTicksToClose = 3
-    /// 这么短的路不算一趟。见类型注释。
-    static let minimumDistanceKm = 0.3
+    /// 停稳多久算这一趟结束。**按秒不按帧**：前台 10 秒一帧是 6 帧，后台 60 秒一帧就是 1 帧，
+    /// 两种节奏给出同一个判定。按帧数算的话，后台一开，收尾要拖到三分钟。
+    static let parkedSecondsToClose: TimeInterval = 60
+    /// 车还上着电时，最多容忍它停多久。超过就按停车那一刻收尾。
+    ///
+    /// mate-cn 用的是半天，因为它的服务端 24 小时常驻，不会漏掉「READY 由 1 变 0」那一帧。
+    /// 我们不一样：手机可能整夜在后台按 60 秒一帧看着车，而某几个车型的 1258 偶尔会一直
+    /// 报 1——真让它等 12 小时，昨晚回家和今早出门就会被粘成同一趟。4 小时足够覆盖任何
+    /// 真人「在车上等人」的场景，又不至于把两天连起来。
+    static let parkedLimitWhilePoweredOn: TimeInterval = 4 * 3600
+    /// 这么短的路不算一趟。
+    static let minimumDistanceKm = 0.2
     /// 两帧间隔超过这个数，就当中间断过。
     static let gapForReconstruction: TimeInterval = 10 * 60
     /// 位移兜底的阈值：80 米（10 秒一帧的话约 29 km/h，走路挪车不会误触发）。
@@ -179,7 +292,12 @@ struct TripTracker {
     /// 上一次采样。开始行程时用它把开始时间往前挪到「车还没动」的那一刻。
     private(set) var last: Sample?
 
-    private var parkedTicks = 0
+    /// 从哪一刻开始停着的。一直停着就是第一次停下的时刻，一动就清空。
+    private var parkedSince: Date?
+    /// 最后一次看到车在动的时刻。收尾时用它的时间。
+    private var lastMovingAt: Date?
+    /// 就这一趟而言，枪是什么时候插进来的。
+    private var cableInAt: Date?
     private var trackKm: Double = 0
     private var startOdometer: Int?
     private var currentOdometer: Int?
@@ -201,8 +319,8 @@ struct TripTracker {
                 reset()
             } else {
                 update(&trip, with: sample)
-                if shouldClose(sample) {
-                    if let finished = finish(&trip, at: sample.at) { completed.append(finished) }
+                if let endedAt = closeTime(sample) {
+                    if let finished = finish(&trip, at: endedAt) { completed.append(finished) }
                     reset()
                 } else {
                     active = trip
@@ -212,7 +330,8 @@ struct TripTracker {
 
         // 这一帧还有余力的时候：车还在开就接着记，否则补一条断档。
         if active == nil {
-            if isMoving(sample) {
+            // 插着枪不动就开始记，会记出一条「在充电桩上开了 0 公里」的行程。
+            if isMoving(sample), sample.cableIn != true {
                 begin(with: sample, vin: vin)
             } else if shouldReconstruct(sample), let previous = last,
                       let reconstructed = reconstructedTrip(from: previous, to: sample, vin: vin) {
@@ -235,15 +354,24 @@ struct TripTracker {
         return Self.distance(a, b) >= Self.movedMeters
     }
 
-    /// 连续几帧停着、里程表也不动 → 这一趟结束了。
+    /// 这一帧该不该收尾。返回「收尾时刻」，nil 表示还没结束。
+    ///
+    /// 三道关的顺序是有讲究的：先看枪（插枪就是结束，一秒都不用等），再看停够没停够，
+    /// 最后才看车还上不上电——因为「还上着电」只在停够时间之后才有意义。
     ///
     /// 里程表必须一起看：有的车型挡位信号在锁车后就断了，读不到被当成「没在开车」；
     /// 只凭挡位会在等一个长红灯时把行程切段。
-    private func shouldClose(_ sample: Sample) -> Bool {
-        guard parkedTicks >= Self.parkedTicksToClose else { return false }
-        let odometerStill = (sample.odometerKm ?? currentOdometer) == currentOdometer
-        if isMoving(sample) { return false }
-        return odometerStill
+    private func closeTime(_ sample: Sample) -> Date? {
+        if cableInAt != nil { return sample.at }
+        guard let parkedSince else { return nil }
+        let parked = sample.at.timeIntervalSince(parkedSince)
+        guard parked >= Self.parkedSecondsToClose else { return nil }
+        if sample.poweredOn == true, parked < Self.parkedLimitWhilePoweredOn {
+            // 人还在车上等着。这一趟没结束。
+            return nil
+        }
+        // 收入时刻取最后一次在动的时刻：停在路边等的那段时间不算行驶。
+        return lastMovingAt ?? sample.at
     }
 
     /// 断档之后要不要补一条。
@@ -282,7 +410,9 @@ struct TripTracker {
         startOdometer = origin.odometerKm ?? sample.odometerKm
         currentOdometer = sample.odometerKm ?? startOdometer
         trackKm = 0
-        parkedTicks = 0
+        parkedSince = nil
+        lastMovingAt = sample.at
+        cableInAt = sample.cableIn == true ? sample.at : nil
     }
 
     private mutating func update(_ trip: inout TripRecord, with sample: Sample) {
@@ -297,8 +427,23 @@ struct TripTracker {
             trip.endLatitude = coordinate.latitude
             trip.endLongitude = coordinate.longitude
         }
+        let odometerMoved = (sample.odometerKm ?? currentOdometer) != currentOdometer
         if let odometer = sample.odometerKm { currentOdometer = odometer }
-        parkedTicks = isMoving(sample) ? 0 : parkedTicks + 1
+
+        // 「停着」= 既没在动、里程表也没跳。只看挡位的话，锁车后挡位信号断掉的车型
+        // 会被当成一直停着；只看位移的话，GPS 漂移又会把停着的车算成在开。
+        if isMoving(sample) || odometerMoved {
+            parkedSince = nil
+            lastMovingAt = sample.at
+        } else if parkedSince == nil {
+            // 从**上一帧**算起：我们看到的第一个「停着」其实更早就停了，按这一帧算会少等几秒。
+            parkedSince = last?.at ?? sample.at
+        }
+
+        if sample.cableIn == true, cableInAt == nil {
+            cableInAt = sample.at
+            if lastMovingAt == nil { lastMovingAt = sample.at }
+        }
     }
 
     /// 收尾：把距离算出来，太短的丢掉。
@@ -339,7 +484,9 @@ struct TripTracker {
 
     private mutating func reset() {
         active = nil
-        parkedTicks = 0
+        parkedSince = nil
+        lastMovingAt = nil
+        cableInAt = nil
         trackKm = 0
         startOdometer = nil
         currentOdometer = nil

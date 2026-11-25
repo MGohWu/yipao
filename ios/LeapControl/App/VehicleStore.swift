@@ -444,6 +444,8 @@ final class VehicleStore {
     private var pollTask: Task<Void, Never>?
     /// App 是否在前台。轮询节奏由它和后台保活一起决定，见 `RecordingPolicy`。
     private var applicationIsActive = true
+    /// 云端行程同步是否正在跑。翻页要好几秒，不能叠着发。
+    private var tripSyncRunning = false
     /// 上一次请求卡片重载的时刻（只在后台做节流，前台每帧都刷）。
     private var lastWidgetReloadAt = Date.distantPast
 
@@ -806,9 +808,9 @@ final class VehicleStore {
             refreshBluetoothRuntime()
             await resolveLocationName()
             publishSnapshot()
-            // 行程记录就挂在这条轮询上：每 10 秒一帧，车动了就开一段，停稳半分钟收尾。
-            // 放在 publishSnapshot 之后，是为了先保证界面和卡片拿到最新车况——
-            // 切行程是副产品，不该拖慢刷新。
+            // 行程记录就挂在这条轮询上：每 10 秒一帧，车动了就开一段，停稳一分钟、且车熄了火
+            // （或插上充电枪）才收尾。放在 publishSnapshot 之后，是为了先保证界面和卡片拿到
+            // 最新车况——切行程是副产品，不该拖慢刷新。
             TripRecorder.shared.observe(fresh, vin: session.selectedVin)
             // 充电记录吃同一帧，判定各管各的。两个状态机互相不知道对方存在，但这恰好是对的：
             // 车不可能同时在开和在充，各判各的不会打架，也省得把两套阈值耦在一起。
@@ -876,6 +878,29 @@ final class VehicleStore {
             return try await client.fetchEnergyDistribution(range: range)
         } catch {
             return nil
+        }
+    }
+
+    /// 拉一次零跑云端的逐趟明细，合进本机列表。
+    ///
+    /// 放在 `VehicleStore` 是因为只有它手里有 `LeapClient`（带登录态和车辆路由）。
+    /// 拉不到不算错——界面会把原因写在同步状态里，列表继续用本机那份，功能不会因此消失。
+    func syncTripLog(force: Bool = false) async {
+        guard !isDemo, session.isLoggedIn, !tripSyncRunning else { return }
+        guard force || TripRecorder.shared.needsCloudSync else { return }
+        tripSyncRunning = true
+        TripRecorder.shared.markSyncing()
+        defer { tripSyncRunning = false }
+
+        let now = Date()
+        let from = now.addingTimeInterval(-Double(TripRecorder.syncWindowDays) * 86_400)
+        do {
+            let records = try await client.fetchCloudTrips(from: from, to: now)
+            TripRecorder.shared.mergeCloud(records)
+            TripRecorder.shared.markSynced(count: records.count)
+        } catch {
+            // 这里不 show(error:)：行程页自己会显示「官方记录暂不可用」，再弹一次扰民。
+            TripRecorder.shared.markSyncFailed(error.localizedDescription)
         }
     }
 

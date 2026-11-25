@@ -8,7 +8,7 @@ import Testing
 ///
 /// 这套规则全靠「帧」判定，改一个阈值就可能把车主的一趟通勤切成五段、或者把两天的行程拼成一条，
 /// 而在真实轮询里很难复现——所以这里用写死的时间轴把几种典型路况摆出来：
-/// 正常一趟、等红灯、挪车位、App 被杀断档、里程表倒退、中途换车。
+/// 正常一趟、等红灯、在路边等人、插枪、挪车位、App 被杀断档、里程表倒退、中途换车。
 @Suite("行程切分")
 struct TripTrackerTests {
     /// 杭州滨江，和坐标换算那组测试同一个点。
@@ -26,7 +26,9 @@ struct TripTrackerTests {
         odo: Int?,
         soc: Int? = 80,
         offset: Double = 0,
-        gear: Bool
+        gear: Bool,
+        poweredOn: Bool? = nil,
+        cableIn: Bool? = nil
     ) -> TripTracker.Sample {
         TripTracker.Sample(
             at: at(minutes),
@@ -36,7 +38,9 @@ struct TripTrackerTests {
                 latitude: origin.latitude + offset,
                 longitude: origin.longitude
             ),
-            gearDriving: gear
+            gearDriving: gear,
+            poweredOn: poweredOn,
+            cableIn: cableIn
         )
     }
 
@@ -48,13 +52,16 @@ struct TripTrackerTests {
         done += tracker.ingest(sample(1.0 / 6, odo: 100, gear: true), vin: "V")
         done += tracker.ingest(sample(4.83, odo: 104, offset: 0.02, gear: true), vin: "V")
         done += tracker.ingest(sample(5, odo: 104, offset: 0.02, gear: false), vin: "V")
-        done += tracker.ingest(sample(5.17, odo: 104, offset: 0.02, gear: false), vin: "V")
-        done += tracker.ingest(sample(5.33, odo: 104, offset: 0.02, gear: false), vin: "V")
+        // 停稳满一分钟才收尾（按秒算，不按帧数）：5 → 6 分钟正好 60 秒。
+        done += tracker.ingest(sample(5.5, odo: 104, offset: 0.02, gear: false), vin: "V")
+        done += tracker.ingest(sample(6, odo: 104, offset: 0.02, gear: false), vin: "V")
 
         #expect(done.count == 1)
         #expect(done.first?.distanceKm == 4, "里程表 100→104，应记 4 公里")
         // 开始时间取「上一次停车采样」而不是「第一次看到 D 档」，否则每趟都会短 10 秒。
         #expect(done.first?.startAt == t0)
+        // 结束时间是最后一帧在动的时刻，不是收尾那一刻：中间那 70 秒是停在路边。
+        #expect(done.first?.endAt == at(4.83))
         #expect(done.first?.isReconstructed == false)
         #expect(tracker.active == nil)
     }
@@ -71,14 +78,70 @@ struct TripTrackerTests {
         #expect(tracker.active != nil, "只停一帧，行程还在进行")
     }
 
-    @Test("挪车位不到 300 米，不算一趟")
+    /// 路边等人：车熄了火、人还在车上（或者只是下车拿个快递）。
+    ///
+    /// 这是过去最容易切错的一处——一停就收尾，一次出门会被拆成两趟，云端按「上电到断电」
+    /// 算的那一趟跟谁都对不上。
+    @Test("车还上着电时停十分钟，仍是同一趟")
+    func waitingInParkKeepsTheTripOpen() {
+        var tracker = TripTracker()
+        var done: [TripRecord] = []
+        done += tracker.ingest(sample(0, odo: 100, gear: false, poweredOn: true), vin: "V")
+        done += tracker.ingest(sample(0.17, odo: 100, gear: true, poweredOn: true), vin: "V")
+        done += tracker.ingest(sample(5, odo: 105, offset: 0.03, gear: true, poweredOn: true), vin: "V")
+        // 停在校门口等了十分钟，车没熄火。
+        for minute in stride(from: 5.5, through: 15, by: 0.5) {
+            done += tracker.ingest(
+                sample(minute, odo: 105, offset: 0.03, gear: false, poweredOn: true), vin: "V"
+            )
+        }
+        #expect(done.isEmpty, "等人不算这一趟结束")
+        #expect(tracker.active != nil)
+
+        // 接着开回家，熄火。
+        done += tracker.ingest(sample(20, odo: 108, offset: 0.06, gear: true, poweredOn: true), vin: "V")
+        done += tracker.ingest(sample(25, odo: 108, offset: 0.06, gear: false, poweredOn: false), vin: "V")
+        done += tracker.ingest(sample(26.5, odo: 108, offset: 0.06, gear: false, poweredOn: false), vin: "V")
+
+        #expect(done.count == 1, "一次出门就是一趟")
+        #expect(done.first?.distanceKm == 8)
+        #expect(done.first?.startAt == t0)
+        #expect(done.first?.endAt == at(20), "结束时间是最后在动的时刻，不是熄火后那一帧")
+    }
+
+    @Test("插上充电枪，这一趟立刻结束，不等一分钟")
+    func pluggingInClosesTheTrip() {
+        var tracker = TripTracker()
+        var done: [TripRecord] = []
+        done += tracker.ingest(sample(0, odo: 100, gear: false), vin: "V")
+        done += tracker.ingest(sample(0.17, odo: 100, gear: true), vin: "V")
+        done += tracker.ingest(sample(5, odo: 103, offset: 0.02, gear: true), vin: "V")
+        done += tracker.ingest(sample(5.17, odo: 103, offset: 0.02, gear: false, cableIn: true), vin: "V")
+
+        #expect(done.count == 1)
+        #expect(done.first?.distanceKm == 3)
+        #expect(tracker.active == nil)
+    }
+
+    @Test("插着枪不动不会开始一趟新行程")
+    func chargingDoesNotStartATrip() {
+        var tracker = TripTracker()
+        _ = tracker.ingest(sample(0, odo: 100, gear: false, cableIn: true), vin: "V")
+        // 有的车型在充电时也会把挡位报成 D（车机按上电状态给的），这时不能当成出发。
+        _ = tracker.ingest(sample(0.17, odo: 100, gear: true, cableIn: true), vin: "V")
+        _ = tracker.ingest(sample(0.33, odo: 100, gear: true, cableIn: true), vin: "V")
+
+        #expect(tracker.active == nil)
+    }
+
+    @Test("挪车位不到 200 米，不算一趟")
     func shortHopIsDropped() {
         var tracker = TripTracker()
         _ = tracker.ingest(sample(0, odo: 100, gear: false), vin: "V")
         _ = tracker.ingest(sample(0.17, odo: 100, gear: true), vin: "V")
         _ = tracker.ingest(sample(0.34, odo: 100, offset: 0.0005, gear: false), vin: "V")
         _ = tracker.ingest(sample(0.5, odo: 100, offset: 0.0005, gear: false), vin: "V")
-        let out = tracker.ingest(sample(0.67, odo: 100, offset: 0.0005, gear: false), vin: "V")
+        let out = tracker.ingest(sample(1.2, odo: 100, offset: 0.0005, gear: false), vin: "V")
 
         #expect(out.isEmpty)
         #expect(tracker.active == nil)

@@ -967,6 +967,151 @@ actor LeapClient {
         return nil
     }
 
+    // MARK: - 原厂逐趟行程（云端）
+
+    /// 拉零跑云端的**逐趟明细**：官方 App「行程」里那一趟趟记录就是这些数。
+    ///
+    /// 端点是 `POST {appCenter}/carownerservice/mileage/daily/detail/page`，路径与入参来自
+    /// `pipipiper/leapmotor-mate-cn`（README 里记着 183 条真车记录的比对）与
+    /// `MiRaToo/LeapMore`，两边的签名方式一致，都是「7 个固定头 + 业务参数」做 HMAC-SHA256。
+    ///
+    /// 这一步的意义是**把「必须开着 App 才记得到」这件事去掉**：过去 30 天的每一趟都能在
+    /// 打开页面时一次性拿回来，手机在不在线都不影响。代价是只有结算数据（起止时间、距离、
+    /// 耗电、最高车速、油耗），没有经纬度——地名仍要靠本机采到的坐标。
+    ///
+    /// 失败一律抛错，由调用方决定要不要降级成本机记录；这里不吞异常，否则界面会以为
+    /// 「官方就是没有记录」，那是两件完全不同的事。
+    func fetchCloudTrips(from: Date, to: Date, pageSize: Int = 50, maxPages: Int = 8) async throws -> [CloudTripRecord] {
+        let vin = session.selectedVin
+        guard !vin.isEmpty else { throw LeapError.missingVehicle }
+        let route = try await ensureRoute()
+        let host = route.appCenter.isEmpty ? route.appRegion : route.appCenter
+        guard !host.isEmpty else { throw LeapError.server("车辆中心路由为空") }
+
+        let startDay = Self.cloudHistoryDay(from)
+        let endDay = Self.cloudHistoryDay(to)
+        // 参与签名的必须是**这次真的发出去的字段**。数值型在签名串里就是它的十进制写法，
+        // 所以这里用 String(page) 和 body 里的 Int 是对得上的（服务端也这么stringify）。
+        func params(_ page: Int) -> [String: String] {
+            ["vin": vin, "startTime": startDay, "endTime": endDay,
+             "pageNum": String(page), "pageSize": String(pageSize)]
+        }
+
+        var records: [CloudTripRecord] = []
+        var seen = Set<String>()
+        var total: Int?
+        for page in 1...maxPages {
+            let body: [String: Any] = [
+                "vin": vin, "startTime": startDay, "endTime": endDay,
+                "pageNum": page, "pageSize": pageSize
+            ]
+            let response = try await cloudHistoryRequest(
+                url: "\(host)/carownerservice/mileage/daily/detail/page",
+                params: params(page),
+                body: body
+            )
+            if !response.isSuccess {
+                // mate-cn 的实测：code 100 就是「这个区间没有记录」，不是错误。
+                if response.responseCode == "100" { break }
+                let message = response.responseMessage
+                BLEDiagnostics.record(
+                    "trip",
+                    "cloud.page\(page) 失败 code=\(BLEDiagnostics.safeMessage(response.responseCode ?? "?")) "
+                        + "msg=\(BLEDiagnostics.safeMessage(message))"
+                )
+                throw LeapError.server(message.isEmpty ? "官方行程记录读取失败（\(response.responseCode ?? "?")）" : message)
+            }
+            let data = response["data"]
+            let rows = data?["list"]?.arrayValue ?? []
+            total = data?["total"]?.intValue ?? total
+            for row in rows {
+                guard let object = row.objectValue,
+                      let record = CloudTripParser.record(from: object, vin: vin),
+                      seen.insert(record.key).inserted else { continue }
+                records.append(record)
+            }
+            if rows.isEmpty { break }
+            if let total, records.count >= total { break }
+        }
+        BLEDiagnostics.record(
+            "trip",
+            "cloud \(startDay)~\(endDay) 拉到 \(records.count) 趟 / 云端称 \(total.map(String.init) ?? "-") 趟"
+        )
+        return records.sorted { $0.startAt > $1.startAt }
+    }
+
+    /// 云端历史接口收的是**日期**（`yyyy-MM-dd`，本地时区），不是毫秒时间戳。
+    /// 这一点和同命名空间的 `drivingrecord/*`（收毫秒/秒）不一样，抄错会被判成参数非法。
+    private static func cloudHistoryDay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
+
+    private func cloudHistoryRequest(
+        url: String, params: [String: String], body: [String: Any]
+    ) async throws -> JSONValue {
+        await awaitOngoingRefresh()
+        try await ensureFreshAccessToken()
+
+        func perform() async throws -> JSONValue {
+            try await request(
+                url: url, method: "POST",
+                headers: try cloudHistoryHeaders(params: params),
+                jsonObject: body
+            )
+        }
+        do {
+            let response = try await perform()
+            if !Self.isNewAuthFailure(response) { return response }
+        } catch let error as LeapError {
+            guard case .http(let status, _) = error, status == 401 || status == 403 else { throw error }
+        }
+        try await refreshAccessToken()
+        return try await perform()
+    }
+
+    /// 云端历史接口的签名头：**7 个固定头 + 业务参数**参与签名，`token`/`userId`/
+    /// `carvin`/`cartype` 发出去但不参与。
+    ///
+    /// 和 `newGatewayHeaders` 的差别只有一个：这里**没有 `nonce`**。这两个接口在官方
+    /// App 和两个开源项目里都用这 7 个头，多带一个 `nonce` 参与签名，服务端重算时对不上。
+    /// 新网关那条链路（车况、登录）用的才是带 `nonce` 的 8 头版本，两套不能混。
+    private func cloudHistoryHeaders(params: [String: String]) throws -> [String: String] {
+        try requireDeviceId()
+        guard let auth = session.newAuth, !auth.accessToken.isEmpty, !auth.signKeyData.isEmpty else {
+            throw LeapError.notLoggedIn
+        }
+        let timestamp = String(Int(Date().timeIntervalSince1970 * 1000))
+        let signed = [
+            "acceptLanguage": "zh-CN",
+            "channel": "1",
+            "deviceType": "ios",
+            "source": "leapmotor",
+            "timestamp": timestamp,
+            "version": session.appVersion,
+            "deviceId": session.deviceId
+        ]
+        let sign = LeapCrypto.hmacSHA256Hex(
+            message: LeapCrypto.sortAndConcatValues(signed, params),
+            key: auth.signKeyData
+        )
+        var headers = signed
+        headers["x-region"] = "CN"
+        headers["x-subversion"] = session.subVersion
+        headers["x-api-signature-version"] = "2.0"
+        headers["token"] = auth.accessToken
+        headers["userId"] = auth.accountId
+        headers["carvin"] = session.selectedVin
+        if !session.selectedCarType.isEmpty { headers["cartype"] = session.selectedCarType }
+        headers["sign"] = sign
+        headers["digest"] = sign
+        headers["Content-Type"] = "application/json;charset=UTF-8"
+        return headers
+    }
+
     // MARK: - 蓝牙钥匙
 
     /// 官方 iOS 从 commoninfo/sync 读取车辆版本，用于选择认证和配置字段。
@@ -1482,6 +1627,7 @@ actor LeapClient {
         headers: [String: String],
         query: [String: String]? = nil,
         jsonBody: [String: String]? = nil,
+        jsonObject: [String: Any]? = nil,
         formBody: [String: String]? = nil,
         emptyBody: Bool = false,
         bleVersionDiagnostic: Bool = false
@@ -1500,7 +1646,12 @@ actor LeapClient {
         urlRequest.httpMethod = method
         for (key, value) in headers { urlRequest.setValue(value, forHTTPHeaderField: key) }
 
-        if let jsonBody {
+        if let jsonObject {
+            // 云端历史接口的分页参数是**数字**（`pageNum: 1`），不是 `"1"`。
+            // 用 [String: String] 那条路会全部变成字符串，服务端按 Int 解析时会判成参数非法。
+            urlRequest.setValue("application/json; charset=utf-8", forHTTPHeaderField: "content-type")
+            urlRequest.httpBody = try JSONSerialization.data(withJSONObject: jsonObject)
+        } else if let jsonBody {
             urlRequest.setValue("application/json; charset=utf-8", forHTTPHeaderField: "content-type")
             urlRequest.httpBody = try JSONSerialization.data(withJSONObject: jsonBody)
         } else if let formBody {

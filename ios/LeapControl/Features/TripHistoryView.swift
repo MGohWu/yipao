@@ -2,10 +2,13 @@ import SwiftUI
 
 /// 逐趟行程记录。
 ///
-/// 和隔壁「行程」（`MileageStatsView`，零跑官方的里程能耗统计）是两件事：那边是官方按天/按周
-/// 聚合的数，这边是 App 自己按 10 秒一次的轮询切出来的「这一趟从哪到哪、跑了多久、掉了几个电」。
-/// 两个数永远对不上——一个按天结算、一个按次切段，中间还隔着「App 有没有在跑」。
-/// 所以这里从头到尾都说清数据是哪来的，页面底部也不放「合计」这种会被拿去对账的数。
+/// 和隔壁「行程」（`MileageStatsView`，零跑官方的里程能耗统计）是两件事：那边是按天/按周
+/// 聚合的数，这边是「这一趟从哪到哪、跑了多久、用了多少电」。
+///
+/// 数据来自两处，页面上分别标出来：
+/// - **官方**：零跑云端自己的逐趟明细（`CloudTripRecord`），App 开没开都有，覆盖近 30 天；
+/// - **本机**：轮询切出来的那些，能补上起终点地名和电量变化；
+/// - **补记**：官方和本机都没有、只能拿里程表差估算的那一段。
 struct TripHistoryView: View {
     @Environment(VehicleStore.self) private var store
     @StateObject private var recorder = TripRecorder.shared
@@ -47,8 +50,10 @@ struct TripHistoryView: View {
                     }
                     if trips.isEmpty {
                         emptyCard
+                        syncRow
                     } else {
                         summaryCard
+                        syncRow
                         ForEach(days, id: \.day) { group in
                             dayCard(group.day, trips: group.trips)
                         }
@@ -59,14 +64,60 @@ struct TripHistoryView: View {
                 .padding(.vertical, 16)
             }
             .scrollIndicators(.hidden)
+            // 官方记录是「按趟结算」的数据，下拉就重新拉一次——不用等 6 小时。
+            .refreshable { await store.syncTripLog(force: true) }
         }
         .navigationTitle("行程记录")
         .navigationBarTitleDisplayMode(.inline)
+        // 进页面顺手对一次官方记录：没有同步过、或者已经过了 6 小时才会真的发请求。
+        .task {
+            await store.syncTripLog()
+        }
         // 地名一个个补，补到就回写文件。只补最近 8 条：更早的那些翻到的概率低，
         // 一进页面就打十几个反地理编码请求，既慢又没必要。
         .task(id: trips.prefix(8).map(\.id)) {
             await resolveMissingPlaces()
         }
+    }
+
+    // MARK: - 同步状态
+
+    /// 官方记录同步得怎么样。失败时点一下重试——比让用户去猜「为什么只有本机记录」好。
+    @ViewBuilder
+    private var syncRow: some View {
+        if !store.isDemo {
+            switch recorder.cloudSync {
+            case .syncing:
+                statusLine(icon: "arrow.triangle.2.circlepath", text: "正在同步零跑官方记录…", tint: .secondary)
+            case .synced(let date, let count):
+                statusLine(
+                    icon: "checkmark.icloud",
+                    text: count > 0
+                        ? "官方记录已同步：\(count) 趟 · \(timeText(date))"
+                        : "官方记录已同步 · \(timeText(date))",
+                    tint: .secondary
+                )
+            case .failed(let message):
+                Button {
+                    Task { await store.syncTripLog(force: true) }
+                } label: {
+                    statusLine(icon: "exclamationmark.icloud", text: "官方记录暂不可用：\(message)", tint: LeapStyle.caution)
+                }
+                .buttonStyle(.plain)
+            case .idle:
+                EmptyView()
+            }
+        }
+    }
+
+    private func statusLine(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.caption2)
+            Text(text).font(.caption2).lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 6)
     }
 
     // MARK: - 汇总
@@ -75,19 +126,23 @@ struct TripHistoryView: View {
         let count = recentTrips.count
         let distance = recentTrips.reduce(0) { $0 + $1.distanceKm }
         let duration = recentTrips.reduce(0) { $0 + $1.duration }
+        let energies = recentTrips.compactMap(\.energyKWh)
+        let energy = energies.reduce(0, +)
         return GlassCard(radius: LeapStyle.tileRadius) {
             VStack(spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("近 7 天").font(.caption).foregroundStyle(.secondary)
+                    Text("近 7 天 · \(count) 趟").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if recentTrips.contains(where: \.isReconstructed) {
                         Text("含补记").font(.caption2).foregroundStyle(.tertiary)
                     }
                 }
                 HStack(spacing: 0) {
-                    metric("行程", value: "\(count)", unit: "次")
-                    divider
                     metric("里程", value: trimmed(distance), unit: "km")
+                    divider
+                    // 官方没给度数的那些（今天刚跑的、或者接口没回来）不计入，所以这一格
+                    // 只在至少有一趟带官方度数时才有意义。
+                    metric("耗电", value: energies.isEmpty ? "—" : String(format: "%.1f", energy), unit: "kWh")
                     divider
                     metric("在车上", value: durationText(duration), unit: "")
                 }
@@ -166,33 +221,49 @@ struct TripHistoryView: View {
                 Text(timeText(trip.startAt))
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
-                if trip.isReconstructed { reconstructedTag }
+                if trip.isReconstructed {
+                    reconstructedTag
+                } else if trip.hasOfficialData {
+                    officialTag
+                }
                 Spacer(minLength: 6)
                 Text("\(trimmed(trip.distanceKm)) km")
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
             }
 
-            HStack(spacing: 5) {
-                Image(systemName: "circle.fill").font(.system(size: 4))
-                Text(trip.startPlace ?? "起点未知")
-                    .lineLimit(1)
-                Image(systemName: "arrow.right").font(.system(size: 9, weight: .semibold))
-                Text(trip.endPlace ?? "终点未知")
-                    .lineLimit(1)
-                if resolvingID == trip.id {
-                    ProgressView().controlSize(.mini)
+            if trip.startCoordinate == nil, trip.endCoordinate == nil {
+                // 云端那批记录只有结算数据，没有经纬度。与其写两行「起点未知」，不如说清原因。
+                Label("官方记录，无起终点位置", systemImage: "cloud")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                HStack(spacing: 5) {
+                    Image(systemName: "circle.fill").font(.system(size: 4))
+                    Text(trip.startPlace ?? "起点未知")
+                        .lineLimit(1)
+                    Image(systemName: "arrow.right").font(.system(size: 9, weight: .semibold))
+                    Text(trip.endPlace ?? "终点未知")
+                        .lineLimit(1)
+                    if resolvingID == trip.id {
+                        ProgressView().controlSize(.mini)
+                    }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
                 Label(durationText(trip.duration), systemImage: "clock")
+                if let energy = trip.energyKWh, energy > 0 {
+                    Label(String(format: "%.1f kWh", energy), systemImage: "bolt.fill")
+                }
                 if let drop = trip.socDrop {
                     Label("\(drop)%", systemImage: "battery.75percent")
                 }
-                if let speed = trip.averageSpeedKmh {
+                if let speed = trip.maxSpeedKmh {
+                    Label("最高 \(speed)", systemImage: "gauge.with.dots.needle.67percent")
+                } else if let speed = trip.averageSpeedKmh {
                     Label("\(Int(speed.rounded())) km/h", systemImage: "gauge.with.dots.needle.33percent")
                 }
             }
@@ -200,6 +271,16 @@ struct TripHistoryView: View {
             .foregroundStyle(.tertiary)
             .labelStyle(.titleAndIcon)
         }
+    }
+
+    /// 官方记录标。和「补记」不同色：一个是可信的，一个是估算的。
+    private var officialTag: some View {
+        Text("官方")
+            .font(.system(size: 10, weight: .medium))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
+            .background(LeapStyle.accent.opacity(0.14), in: .rect(cornerRadius: 4))
+            .foregroundStyle(LeapStyle.accent)
     }
 
     private var reconstructedTag: some View {
@@ -220,7 +301,7 @@ struct TripHistoryView: View {
                     .font(.title2)
                     .foregroundStyle(.secondary)
                 Text("还没有行程记录").font(.subheadline.weight(.medium))
-                Text("App 开着的时候每 10 秒看一次车况，车一动就开始记，停稳半分钟后收尾。App 没在跑的那段路，下次打开时会按里程表的差补一条「补记」。")
+                Text("零跑云端会存每一趟的结算数据，打开这一页就会拉下来（最近 30 天），App 没开过也不影响。本机同时按 10 秒一次的车况自己切段，补上起终点和电量；两边都没有的那段路，才会按里程表差补一条「补记」。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -232,7 +313,7 @@ struct TripHistoryView: View {
     }
 
     private var footer: some View {
-        Text("记录在本机，不上传。里程按里程表与轨迹取大者，与零跑官方「行程」页的按天统计不会完全一致。")
+        Text("标「官方」的是零跑云端的逐趟结算（距离与度数对得上官方 App）；没标的来自本机轮询，多出起终点地名与电量变化。「补记」是按里程表差估算的，只出现在官方也没有记录的那段。")
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .multilineTextAlignment(.center)
@@ -246,7 +327,9 @@ struct TripHistoryView: View {
     private func resolveMissingPlaces() async {
         guard !store.isDemo else { return }
         let pending = Array(recorder.trips.prefix(8).filter {
-            $0.startPlace == nil || $0.endPlace == nil
+            // 官方那批没有经纬度，问了也没得补，直接跳过——否则每条都要白等 350 毫秒。
+            ($0.startPlace == nil || $0.endPlace == nil)
+                && ($0.startCoordinate != nil || $0.endCoordinate != nil)
         })
         for trip in pending {
             guard !Task.isCancelled else { return }
