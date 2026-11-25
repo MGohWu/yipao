@@ -480,6 +480,20 @@ enum SharedSettings {
         set { defaults?.set(newValue, forKey: widgetControlKey) }
     }
 
+    private static let backgroundRecordingKey = "backgroundRecordingEnabled.v1"
+
+    /// 后台是否继续记录行程与充电（见 `BackgroundKeeper`）。
+    ///
+    /// **默认关闭**，而且不是没想好：开了以后要拿一块电换记录完整度，状态栏还会多一个
+    /// 定位图标。这种账必须让用户自己算，不能替他默认接受。
+    ///
+    /// 存在 App Group 里而不是 `UserDefaults.standard`，是为了跟其他偏好一致——
+    /// 卡片将来要解释「为什么昨晚那段路没有记录」时也读得到。
+    static var backgroundRecordingEnabled: Bool {
+        get { defaults?.bool(forKey: backgroundRecordingKey) ?? false }
+        set { defaults?.set(newValue, forKey: backgroundRecordingKey) }
+    }
+
     /// 新版首次启动统一开启，后续启动保留用户选择。
     @discardableResult
     static func migrateDirectControlDefault(in preferences: UserDefaults) -> Bool {

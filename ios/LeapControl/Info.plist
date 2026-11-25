@@ -65,14 +65,24 @@
 	<string>使用 Face ID 快速验证控车指令，替代每次输入操作密码。</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>用于发现并连接你已授权的车辆，实现蓝牙控车和无感解锁。</string>
+	<!-- 后台能力。两项各管一件事，别混：
+	     `bluetooth-central`：车钥匙扫描/连接，锁屏后也要能靠近解锁。
+	     `location`：**为了保活，不是为了导航**。行程和充电靠 10 秒一次的轮询切段，
+	     退到后台几秒进程就被挂起，所以用精度 3 公里的持续定位把进程拖住
+	     （见 BackgroundKeeper）。用户可以在设置里关掉，关掉后进后台就停记录。
+	     单有这一项不够：还必须 `allowsBackgroundLocationUpdates = true`
+	     且定位权限是「始终允许」，三者缺一，后台记录就是静默失效。 -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
+		<string>location</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>用于在地图上显示你和车辆的位置，并在靠近车辆时恢复蓝牙连接。</string>
+	<string>用于在地图上显示你和车辆的位置，并计算到车的距离。</string>
+	<!-- 这句会原样出现在系统权限弹窗里，所以要说清两件事：无感解锁、后台记录。
+	     只写「提升体验」这类空话，用户只会点「不允许」。 -->
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>用于在锁屏或后台时监测车辆 Beacon 区域并恢复蓝牙连接，实现无感解锁。</string>
+	<string>用于锁屏后继续读取车况，记录每次行程和充电；也用于监测车辆 Beacon 区域，靠近时恢复蓝牙连接实现无感解锁。位置本身不会上传。</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>iosamap</string>

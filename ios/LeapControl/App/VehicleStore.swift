@@ -439,23 +439,53 @@ final class VehicleStore {
         return Vehicle.supportsFridge(carType: vehicle.carType, permission: vehicle.permission)
     }
 
-    // MARK: - 前台轮询
+    // MARK: - 轮询
 
     private var pollTask: Task<Void, Never>?
+    /// App 是否在前台。轮询节奏由它和后台保活一起决定，见 `RecordingPolicy`。
+    private var applicationIsActive = true
+    /// 上一次请求卡片重载的时刻（只在后台做节流，前台每帧都刷）。
+    private var lastWidgetReloadAt = Date.distantPast
 
-    /// 车况没有推送，只能轮询。前台每 10 秒一次，进后台立刻停——
-    /// 后台既刷新不了界面，也只是白白耗电和打服务端。
-    static let pollInterval: Duration = .seconds(10)
-
+    /// 车况没有推送，只能轮询。
+    ///
+    /// 节奏不写死：前台 10 秒一次（界面要跟得上）；后台如果「后台记录」开着且保活
+    /// 确实在跑，降到 60 秒一次继续记；否则干脆停——没有保活，进程几秒后就被挂起，
+    /// 留着这个 task 只会让「最后一帧」的时间停在退后台那一刻。
     func startPolling() {
         stopPolling()
         guard session.isLoggedIn, !isDemo else { return }
+        guard pollIntervalNow != nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: Self.pollInterval)
+                // 每一轮重新取：中途切了前后台，下一轮就换节奏，不必重建 task。
+                guard let interval = self?.pollIntervalNow else { return }
+                try? await Task.sleep(for: interval)
                 guard !Task.isCancelled, let self else { return }
                 await self.refresh()
             }
+        }
+    }
+
+    /// 这一轮该等多久。`nil` 表示现在不该轮询。
+    private var pollIntervalNow: Duration? {
+        RecordingPolicy.pollInterval(
+            isForeground: applicationIsActive,
+            keepsRecordingInBackground: BackgroundKeeper.shared.isRunning
+        )
+    }
+
+    /// 退到后台时调。
+    ///
+    /// 顺序要紧：先让 `BackgroundKeeper` 按当前权限重算一次——用户可能刚在系统设置里
+    /// 把权限从「始终」改回「使用期间」，那这一趟退后台就该停记录，而不是假装还在跑。
+    func enterBackground() {
+        applicationIsActive = false
+        BackgroundKeeper.shared.refresh()
+        if BackgroundKeeper.shared.isRunning {
+            startPolling()
+        } else {
+            stopPolling()
         }
     }
 
@@ -511,6 +541,10 @@ final class VehicleStore {
         // 开 App 先探一次登录态：被挤下线后车况仍能刷出来，只有主动探控车 token 才发现。
         // 失效就直接回登录页，不再往下拉车况和轮询。
         guard await validateSession(force: true) else { return }
+        // 上次退出时开着「后台记录」的话，这次是新进程，保活得重新挂上。
+        // 走 `refresh()` 而不是 `setEnabled(true)`：不会弹权限窗，
+        // 权限被人改过的情形留给设置页那行提示去说。
+        BackgroundKeeper.shared.refresh()
         Task { await recoverBluetoothCredentialIfNeeded() }
         await refresh(showSpinner: true)
         consumePendingWidgetAction()
@@ -794,6 +828,13 @@ final class VehicleStore {
             locationName: locationName,
             updatedAt: lastUpdated ?? .now
         ))
+        // 后台一帧 60 秒，不能每帧都去戳 WidgetCenter：系统对 timeline 重载是有预算的，
+        // 戳太勤会被降权，等到真该刷（比如刚开始充电）的时候反而刷不出来。
+        // 后台三分钟放一次足够——卡片上那个「几分钟前」本来也没人盯着看。
+        if !applicationIsActive, Date.now.timeIntervalSince(lastWidgetReloadAt) < 180 {
+            return
+        }
+        lastWidgetReloadAt = .now
         LeapWidgets.reloadVehicleSurfaces()
     }
 
@@ -1375,6 +1416,7 @@ final class VehicleStore {
     }
 
     func updateApplicationActivity(_ active: Bool) {
+        applicationIsActive = active
         bleController.setApplicationActive(active)
     }
 

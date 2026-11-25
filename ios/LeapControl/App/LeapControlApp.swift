@@ -117,6 +117,9 @@ struct RootView: View {
             // 取反读到的还是中午那份「已锁」，发出去的会是解锁。
             // 轮询放最后开：`refresh()` 撞上正在飞的请求会直接返回，先开轮询等于自找撞车。
             if phase == .active, store.isLoggedIn {
+                // 用户可能刚在系统设置里把定位权限改成「始终」，回到前台先重算一次，
+                // 免得 App 还停在 `needsAlways` 那个旧判断上。
+                BackgroundKeeper.shared.refresh()
                 Task {
                     guard await store.validateSession() else { return }
                     await store.refresh()
@@ -126,8 +129,16 @@ struct RootView: View {
             } else if phase == .active {
                 // 停在登录页也可能是启动那帧钥匙串没读到（重启未解锁被拉起、
                 // prewarming），前台已解锁，给一次重读自愈的机会。
+                BackgroundKeeper.shared.refresh()
                 Task { await store.restoreSessionIfNeeded() }
+            } else if phase == .background {
+                // 退后台不再一律停轮询：开了「后台记录」且保活真的在跑，就继续记，
+                // 只是节奏从 10 秒降到 60 秒（见 `RecordingPolicy`）。保活没起来
+                // 的话 `enterBackground()` 会自己停掉——硬留着只是自欺。
+                store.enterBackground()
             } else {
+                // `.inactive`：下拉控制中心、Face ID 弹窗都算，几秒就回来。
+                // 这时候停轮询不会丢记录，停了也免得白打请求。
                 store.stopPolling()
             }
         }

@@ -12,6 +12,9 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var store = store
+        // 单例本身就是这里的数据源，不另存一份：开关、权限状态、最近一次定位时间
+        // 都在它身上，View 只是照着画。
+        @Bindable var keeper = BackgroundKeeper.shared
 
         List {
             // 账号和车辆是一件事：这个账号下有哪些车。原来分成两段，中间隔着别的设置，
@@ -104,6 +107,48 @@ struct SettingsView: View {
             }
 
             // calibrationSection
+
+            Section {
+                Toggle(isOn: $keeper.isEnabled) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("后台记录")
+                            Text("锁屏后继续记录行程与充电")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "location.circle")
+                    }
+                }
+                .tint(LeapStyle.accent)
+
+                // 权限不对时必须说清「去哪改」：这一项失效是静默的，
+                // 用户只会觉得「开了跟没开一样」，然后来问为什么记录是空的。
+                if let hint = keeper.statusHint {
+                    Label {
+                        Text(hint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(LeapStyle.caution)
+                    }
+                } else if keeper.isEnabled, let fix = keeper.lastFixAt {
+                    Label {
+                        Text("最近一次定位更新：\(fix.formatted(.relative(presentation: .named)))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundStyle(LeapStyle.accent)
+                    }
+                }
+            } header: {
+                Text("后台记录")
+            } footer: {
+                Text("开启后按 60 秒一次读取车况，用来切分行程和充电。需要把定位权限设为「始终允许」，锁屏时状态栏会显示定位图标，耗电会增加。位置本身不会上传。")
+            }
 
             Section {
                 Button { presentedDoc = .userAgreement } label: {
