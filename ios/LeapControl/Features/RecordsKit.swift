@@ -211,7 +211,9 @@ struct RecordsHero: View {
                     if let label = bar.label {
                         Text(label)
                             .font(.system(size: 9, weight: bar.isCurrent ? .semibold : .regular))
-                            .foregroundStyle(bar.isCurrent ? LeapStyle.accent : .tertiary)
+                            // `.tertiary` 是层次样式、不是 `Color`，和 `LeapStyle.accent` 拼在
+                            // 三元里会让编译器按 `Color` 推，报「tertiary 不能用在 Color 上」。
+                            .foregroundStyle(bar.isCurrent ? LeapStyle.accent : LeapStyle.secondaryLabel)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -307,7 +309,7 @@ enum RecordsSyncState {
 
     var tint: Color {
         if case .failed = self { return LeapStyle.caution }
-        return .secondary
+        return LeapStyle.secondaryLabel
     }
 }
 
