@@ -18,10 +18,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-OUTPUT="${OUTPUT:-$(pwd)/build/Yipao-iOS-unsigned.ipa}"
+OUTPUT="${OUTPUT:-$(pwd)/build/跑跑-iOS-unsigned.ipa}"
 SCHEME="LeapControl"
 PROJECT="LeapControl.xcodeproj"
-ARCHIVE="$(pwd)/build/Yipao.xcarchive"
+ARCHIVE="$(pwd)/build/Paopao.xcarchive"
 
 if ! command -v xcodegen >/dev/null 2>&1; then
     echo "缺 xcodegen：brew install xcodegen" >&2

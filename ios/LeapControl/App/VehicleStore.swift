@@ -446,6 +446,8 @@ final class VehicleStore {
     private var applicationIsActive = true
     /// 云端行程同步是否正在跑。翻页要好几秒，不能叠着发。
     private var tripSyncRunning = false
+    /// 云端充电同步同理，单独一个闸：两个接口分开拉，谁失败都不影响另一个。
+    private var chargeSyncRunning = false
     /// 上一次请求卡片重载的时刻（只在后台做节流，前台每帧都刷）。
     private var lastWidgetReloadAt = Date.distantPast
 
@@ -904,6 +906,27 @@ final class VehicleStore {
         } catch {
             // 这里不 show(error:)：行程页自己会显示「官方记录暂不可用」，再弹一次扰民。
             TripRecorder.shared.markSyncFailed(error.localizedDescription)
+        }
+    }
+
+    /// 拉一次零跑云端的充电明细，合进本机列表。理由与 `syncTripLog` 相同。
+    func syncChargeLog(force: Bool = false) async {
+        guard !isDemo, session.isLoggedIn, !chargeSyncRunning else { return }
+        guard force || ChargeRecorder.shared.needsCloudSync else { return }
+        chargeSyncRunning = true
+        ChargeRecorder.shared.markSyncing()
+        defer { chargeSyncRunning = false }
+
+        let now = Date()
+        let from = now.addingTimeInterval(-Double(ChargeRecorder.syncWindowDays) * 86_400)
+        // `endTime` 不含右端，给明天，否则今天的充电要等第二天才出现。
+        let to = now.addingTimeInterval(86_400)
+        do {
+            let records = try await client.fetchCloudCharges(from: from, to: to)
+            ChargeRecorder.shared.mergeCloud(records)
+            ChargeRecorder.shared.markSynced(count: records.count)
+        } catch {
+            ChargeRecorder.shared.markSyncFailed(error.localizedDescription)
         }
     }
 

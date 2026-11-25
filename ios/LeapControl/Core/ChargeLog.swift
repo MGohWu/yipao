@@ -3,13 +3,15 @@ import Foundation
 
 /// 一次充电：从「电流真的流进电池」到「车说这次充完了 / 拔枪」。
 ///
-/// 和行程记录一样，**这份数据是我们自己看着车况攒的**，不是零跑云端给的。云端
-/// `drivingrecord` 命名空间里只有里程/能耗的按天聚合，没有任何充电明细接口
-/// （`ChargeView` 里那些 `query...` 都是充电计划与配置，不是历史）。
+/// 数据有两个来源，和行程记录同一套做法：
 ///
-/// 限制也同源：App 没运行时看不到车。不过充电比行车友好多——充电时车是静止的，
-/// SoC 只会往上涨，前后两次看到的电量差就足以说明「这段时间充了多少」。所以补记
-/// 在充电这边的可信度比行程那边高，界面上的说法也要相应地区别开。
+/// 1. 零跑云端的充电明细（`CloudChargeRecord`，`officialKey != nil`）。App 开没开都有，
+///    覆盖近 30 天，度数用车的结算值，还带充电地点坐标。
+/// 2. 本机轮询自己积分出来的（`ChargeTracker`）。它多出起止电量、峰值功率这两项，
+///    云端不给；补记（`isReconstructed`）也是这一支的粗版本。
+///
+/// 一次充电的物理条件比行车简单——车是静止的，SoC 只往上走——所以补记在充电这边
+/// 本来就比行程那边可信；接上云端之后，它只在云端也没有那次记录时才留着。
 struct ChargeRecord: Codable, Identifiable, Hashable, Sendable {
     var id: UUID
     /// 哪台车。多车账号切车之后，列表不能把两台车混在一起算电费。
@@ -32,6 +34,11 @@ struct ChargeRecord: Codable, Identifiable, Hashable, Sendable {
     var place: String?
     /// 补记：App 没在跑的那段，用前后两次看到的电量差补出来的一条。
     var isReconstructed: Bool
+    /// 云端那条记录的主键。有了它，重复同步就是幂等的；`!= nil` 也等于「这次充电有官方数据」。
+    var officialKey: String?
+
+    /// 这一段有没有官方结算数据。
+    var isOfficial: Bool { officialKey != nil }
 
     init(
         id: UUID = UUID(),
@@ -45,7 +52,8 @@ struct ChargeRecord: Codable, Identifiable, Hashable, Sendable {
         isDC: Bool = false,
         coordinate: CLLocationCoordinate2D? = nil,
         place: String? = nil,
-        isReconstructed: Bool = false
+        isReconstructed: Bool = false,
+        officialKey: String? = nil
     ) {
         self.id = id
         self.vin = vin
@@ -60,6 +68,7 @@ struct ChargeRecord: Codable, Identifiable, Hashable, Sendable {
         self.longitude = coordinate?.longitude
         self.place = place
         self.isReconstructed = isReconstructed
+        self.officialKey = officialKey
     }
 
     var coordinate: CLLocationCoordinate2D? {

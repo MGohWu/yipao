@@ -9,9 +9,20 @@ import Foundation
 ///
 /// 能量不是车给的。车只报电压和电流，我们按「功率 × 时间」积分（`ChargeTracker`），
 /// 再拿 SoC 差交叉验证；两者对不上时以积分为准，因为电量读数只有整数个百分点。
+///
+/// 另外还有一路：零跑云端的充电明细（`LeapClient.fetchCloudCharges`）。它覆盖 App 没开的
+/// 那段时间，度数用车的结算值；两者由 `CloudChargeMerge` 合成，同一次充电不会记两遍。
 @MainActor
 final class ChargeRecorder: ObservableObject {
     static let shared = ChargeRecorder()
+
+    /// 云端同步的状态。和 `TripRecorder.CloudSync` 同一个形状，界面写法一致。
+    enum CloudSync: Equatable {
+        case idle
+        case syncing
+        case synced(Date, Int)
+        case failed(String)
+    }
 
     /// 已结束的充电，最新的在前。
     @Published private(set) var charges: [ChargeRecord]
@@ -19,13 +30,33 @@ final class ChargeRecorder: ObservableObject {
     @Published private(set) var active: ChargeRecord?
     /// 每 1% 电量约等于多少度电（含充电损耗）。补记只靠它换算出「充了多少度」。
     @Published private(set) var kwhPerPercent: Double?
+    @Published private(set) var cloudSync: CloudSync = .idle
+
+    /// 充电比行车稀疏，但一次充电的数据也只在一段时间后才结算，节奏取一样的 6 小时。
+    static let syncInterval: TimeInterval = 6 * 3600
+    static let syncWindowDays = 30
 
     private var tracker = ChargeTracker()
+    private let defaults = UserDefaults(suiteName: SnapshotStore.appGroup) ?? .standard
+    private static let lastSyncKey = "chargeCloudSyncAt"
 
     private init() {
         let file = ChargeLogStore.load()
         charges = file.records
         kwhPerPercent = file.kwhPerPercent
+        if let stamp = defaults.object(forKey: Self.lastSyncKey) as? Date {
+            cloudSync = .synced(stamp, 0)
+        }
+    }
+
+    var lastSyncAt: Date? {
+        if case .synced(let date, _) = cloudSync { return date }
+        return nil
+    }
+
+    var needsCloudSync: Bool {
+        guard let lastSyncAt else { return true }
+        return Date().timeIntervalSince(lastSyncAt) >= Self.syncInterval
     }
 
     /// 每轮车况刷新后调一次。
@@ -58,6 +89,41 @@ final class ChargeRecorder: ObservableObject {
               charges[index].place != place else { return }
         charges[index].place = place
         persist()
+    }
+
+    // MARK: - 云端
+
+    /// 把云端那一批充电记录合进列表。幂等，可以反复调。
+    @discardableResult
+    func mergeCloud(_ records: [CloudChargeRecord]) -> CloudChargeMerge.Result {
+        let now = Date()
+        let window = now.addingTimeInterval(-Double(Self.syncWindowDays + 1) * 86_400)...now.addingTimeInterval(86_400)
+        // 正在充的这一段还没结算，云端不会有；万一有也先跳过，等它结束再合。
+        let filtered = records.filter { record in
+            guard let active else { return true }
+            return CloudTripMerge.intersection(active.startAt, active.endAt, record.startAt, record.endAt) <= 0
+        }
+        let result = CloudChargeMerge.merge(local: charges, cloud: filtered, window: window)
+        charges = result.charges
+        persist()
+        if result.added > 0 || result.matched > 0 || result.dropped > 0 {
+            BLEDiagnostics.record(
+                "charge",
+                "cloud合并 新增\(result.added) 对齐\(result.matched) 删补记\(result.dropped) 共\(charges.count)条"
+            )
+        }
+        return result
+    }
+
+    func markSyncing() { cloudSync = .syncing }
+
+    func markSynced(at date: Date = .now, count: Int) {
+        cloudSync = .synced(date, count)
+        defaults.set(date, forKey: Self.lastSyncKey)
+    }
+
+    func markSyncFailed(_ message: String) {
+        cloudSync = .failed(message)
     }
 
     private func record(_ charge: ChargeRecord) {

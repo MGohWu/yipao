@@ -1040,6 +1040,71 @@ actor LeapClient {
         return records.sorted { $0.startAt > $1.startAt }
     }
 
+    /// 拉零跑云端的**充电明细**：`POST {appCenter}/carownerservice/charge/daily/detail/page`。
+    ///
+    /// 和行程那套是同一个家族（同样的 7 头签名、同样的 `data.list` / `data.total` 分页），
+    /// 两个细节不同，抄错任何一个都会被判参数非法：
+    /// - **分页参数是字符串**（`"1"` / `"50"`），行程那边是数字；
+    /// - 上限 100 条一页，这边用 50。
+    ///
+    /// 返回里有 `chargeInEnergy`（度）和 `chargeStartLatitude/Longitude`（GCJ-02），
+    /// 所以充电记录也能做到「App 没开过也有一条，而且带地点」。
+    func fetchCloudCharges(from: Date, to: Date, pageSize: Int = 50, maxPages: Int = 8) async throws -> [CloudChargeRecord] {
+        let vin = session.selectedVin
+        guard !vin.isEmpty else { throw LeapError.missingVehicle }
+        let route = try await ensureRoute()
+        let host = route.appCenter.isEmpty ? route.appRegion : route.appCenter
+        guard !host.isEmpty else { throw LeapError.server("车辆中心路由为空") }
+
+        let startDay = Self.cloudHistoryDay(from)
+        let endDay = Self.cloudHistoryDay(to)
+        func params(_ page: Int) -> [String: String] {
+            ["vin": vin, "startTime": startDay, "endTime": endDay,
+             "pageNum": String(page), "pageSize": String(pageSize)]
+        }
+
+        var records: [CloudChargeRecord] = []
+        var seen = Set<String>()
+        var total: Int?
+        for page in 1...maxPages {
+            let body: [String: Any] = [
+                "vin": vin, "startTime": startDay, "endTime": endDay,
+                "pageNum": String(page), "pageSize": String(pageSize)
+            ]
+            let response = try await cloudHistoryRequest(
+                url: "\(host)/carownerservice/charge/daily/detail/page",
+                params: params(page),
+                body: body
+            )
+            if !response.isSuccess {
+                if response.responseCode == "100" { break }
+                let message = response.responseMessage
+                BLEDiagnostics.record(
+                    "charge",
+                    "cloud.page\(page) 失败 code=\(BLEDiagnostics.safeMessage(response.responseCode ?? "?")) "
+                        + "msg=\(BLEDiagnostics.safeMessage(message))"
+                )
+                throw LeapError.server(message.isEmpty ? "官方充电记录读取失败（\(response.responseCode ?? "?")）" : message)
+            }
+            let data = response["data"]
+            let rows = data?["list"]?.arrayValue ?? []
+            total = data?["total"]?.intValue ?? total
+            for row in rows {
+                guard let object = row.objectValue,
+                      let record = CloudChargeParser.record(from: object, vin: vin),
+                      seen.insert(record.key).inserted else { continue }
+                records.append(record)
+            }
+            if rows.isEmpty { break }
+            if let total, records.count >= total { break }
+        }
+        BLEDiagnostics.record(
+            "charge",
+            "cloud \(startDay)~\(endDay) 拉到 \(records.count) 次 / 云端称 \(total.map(String.init) ?? "-") 次"
+        )
+        return records.sorted { $0.startAt > $1.startAt }
+    }
+
     /// 云端历史接口收的是**日期**（`yyyy-MM-dd`，本地时区），不是毫秒时间戳。
     /// 这一点和同命名空间的 `drivingrecord/*`（收毫秒/秒）不一样，抄错会被判成参数非法。
     private static func cloudHistoryDay(_ date: Date) -> String {
