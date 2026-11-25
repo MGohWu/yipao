@@ -102,3 +102,33 @@ open LeapControl.xcodeproj
 2. 充电记录也接云端统计接口（`charge/statistic/days` 是通的，能对账）
 3. 桌面小组件跟着新配色重画一版
 4. 设置页还留着旧的圆角/间距，没跟 2.7 的设计令牌对齐
+
+## 七、只有手机、没有电脑的时候（2026-11-25 补）
+
+### 能做的：照常出包
+
+打包和测试都在 GitHub 的机器上跑，手机浏览器就够了：
+
+1. `https://github.com/MGohWu/yipao/actions`
+2. 左边 **Build unsigned IPA** → 右边 **Run workflow** → `main` → 绿色按钮
+3. 等 5～8 分钟（排队时更久）
+4. 这条 run 页面最下面 **Artifacts** → 点 `Paopao-iOS-unsigned` 下载
+5. 手机上会拿到一个 zip：用「文件」App 解压，里面是 `跑跑-iOS-unsigned.ipa`
+
+### 能做的：手机上签名安装
+
+- 用自己的 Apple ID 在 ESign / 轻松签这类工具里签（个人证书 7 天有效，到期重签）
+- 不要用来源不明的企业证书：随时被吊销，而且是把设备交出去了
+- 装完第一次打开要信任证书：设置 → 通用 → VPN与设备管理
+
+### 不能做的：改代码
+
+改代码需要一个能跑 WorkBuddy 的桌面环境（Windows / macOS）。云电脑可以：
+
+- 租一台 Windows 云桌面（按小时计费那种），装 WorkBuddy、登录同一账号，`git clone` 仓库
+- 这个对话不会自动搬过去——**上下文在 `HANDOFF.md` 里**，把文件丢给新的会话说「继续」即可
+- 云电脑不需要是 Mac：iOS 的编译签名全在 GitHub Actions 上，本地只要能 git + 跑 WorkBuddy
+
+### 一句话
+
+**出包不需要电脑，改代码需要。** 手机能做的上限就是触发构建、下载、签名、安装。
