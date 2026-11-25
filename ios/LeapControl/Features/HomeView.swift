@@ -865,6 +865,9 @@ private struct VehicleHero<Badge: View>: View {
                 // 它就是最终画面，而不是留一块空白。3D 出来后盖在它上面。
                 staticVehicle.opacity(is3DReady ? 0 : 1)
             }
+            // 展台挂在背景上，不参与布局：车厢后面一圈打光、脚下一点落影。
+            // 官方 App 的车不是浮在白底上的，是「停在展台上」——差别就在这两层。
+            .background { stage }
             // 纯装饰。锁车状态由下面那排徽章负责播报，这里再念一遍「汽车」是噪音。
             .accessibilityHidden(true)
             // 3D 资源被撤走或换成另一台车的目录时必须把就绪/失败位清掉：
@@ -881,6 +884,42 @@ private struct VehicleHero<Badge: View>: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 6)
         .padding(.bottom, 4)
+    }
+
+    /// 展台：车后一团柔光 + 一圈很淡的光环 + 脚下落影。
+    ///
+    /// 用 `GeometryReader` 是因为这几层都要按 hero 的实际宽高取相对尺寸——
+    /// 车图有 1125×525 也有 1125×1200 的，写死像素在另一种比例上就错位了。
+    /// 挂在 `.background` 里，所以再贪心也不会把 hero 撑高。
+    private var stage: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            ZStack {
+                // 打光：中心一团主色光，往外化开。深色下靠底色本来就暗，给得少一点。
+                RadialGradient(
+                    colors: [LeapStyle.accent.opacity(colorScheme == .dark ? 0.22 : 0.15), .clear],
+                    center: .center,
+                    startRadius: 4,
+                    endRadius: width * 0.62
+                )
+
+                // 光环：一圈几乎看不见的圆，把「展台」的范围暗示出来。
+                Circle()
+                    .stroke(LeapStyle.primaryLabel.opacity(colorScheme == .dark ? 0.10 : 0.06),
+                            lineWidth: 1)
+                    .frame(width: width * 0.78)
+                    .position(x: width / 2, y: height * 0.52)
+
+                // 落影：压在车轮下方。偏一点也没关系——它是模糊的，读起来是环境影而不是线。
+                Ellipse()
+                    .fill(LeapStyle.primaryLabel.opacity(colorScheme == .dark ? 0.34 : 0.16))
+                    .frame(width: width * 0.52, height: max(14, height * 0.05))
+                    .blur(radius: max(8, height * 0.05))
+                    .position(x: width / 2, y: height * 0.80)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。

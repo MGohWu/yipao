@@ -118,8 +118,6 @@ struct QuickControlBar: View {
         let visible = controls.filter(isSupported)
         let overflow = visible.count > Self.rowCapacity
         let firstRow = overflow ? Array(visible.prefix(Self.rowCapacity)) : visible
-        // 展开部分按每行 4 个切开。拆出「解锁」之后全支持是 9 项，展开部分有 5 个，
-        // 塞进一行会按 4 格的宽度排 5 个、挤出卡片。
         let rest = overflow ? Array(visible.dropFirst(Self.rowCapacity)) : []
         let extraRows = stride(from: 0, to: rest.count, by: Self.rowCapacity).map {
             Array(rest[$0..<min($0 + Self.rowCapacity, rest.count)])
@@ -127,40 +125,62 @@ struct QuickControlBar: View {
         let showExtraRows = overflow && expanded
         let rowCount = 1 + (showExtraRows ? extraRows.count : 0)
 
-        LeapGlassContainer(spacing: 8) {
-            GeometryReader { proxy in
-                // chevron 不占一个整格：它是布局开关不是控制项，占格会把四个真按钮挤瘦一号。
-                let chevronWidth: CGFloat = overflow ? 24 : 0
-                let slotCount = overflow ? Self.rowCapacity : max(firstRow.count, 1)
-                let slotWidth = (proxy.size.width - chevronWidth) / CGFloat(slotCount)
-
-                VStack(spacing: Self.rowSpacing) {
-                    HStack(spacing: 0) {
-                        ForEach(firstRow) { control in
-                            slot(control, width: slotWidth)
-                        }
-                        if overflow { chevron }
-                    }
-                    if showExtraRows {
-                        ForEach(extraRows, id: \.first) { row in
-                            HStack(spacing: 0) {
-                                ForEach(row) { control in
-                                    slot(control, width: slotWidth)
-                                }
-                                // 不足一行时左对齐补空，列和第一行对齐。
-                                Spacer(minLength: 0)
-                            }
-                            .transition(.opacity)
+        LeapGlassContainer(spacing: 10) {
+            VStack(spacing: 6) {
+                GeometryReader { proxy in
+                    let slotWidth = proxy.size.width / CGFloat(Self.rowCapacity)
+                    VStack(spacing: Self.rowSpacing) {
+                        row(firstRow, slotWidth: slotWidth)
+                        if showExtraRows {
+                            ForEach(extraRows, id: \.first) { row($0, slotWidth: slotWidth) }
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                 }
+                .frame(height: Self.rowHeight * CGFloat(rowCount) + Self.rowSpacing * CGFloat(rowCount - 1))
+
+                // chevron 不再挤在格子行尾：那里本来就只有 24pt，塞进去既不对称、
+                // 也让人以为它是第五个控制项。改成一条居中的小胶囊，写清「更多控制」。
+                if overflow { expandToggle }
             }
-            .frame(height: Self.rowHeight * CGFloat(rowCount) + Self.rowSpacing * CGFloat(rowCount - 1))
         }
         .commandBusy(store.isSendingCommand)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, overflow ? 8 : 12)
         .leapGlass(.regular, in: .rect(cornerRadius: LeapStyle.tileRadius))
+    }
+
+    /// 摆一行控制格。不足一行时补空，格子宽度不变，列才对得齐。
+    private func row(_ items: [QuickControl], slotWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            ForEach(items) { slot($0, width: slotWidth) }
+            if items.count < Self.rowCapacity {
+                ForEach(0..<(Self.rowCapacity - items.count), id: \.self) { _ in
+                    Color.clear.frame(width: slotWidth, height: 1)
+                }
+            }
+        }
+    }
+
+    private var expandToggle: some View {
+        Button {
+            withAnimation(.smooth(duration: 0.28)) { expanded.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Text(expanded ? "收起" : "更多控制")
+                Image(systemName: "chevron.down")
+                    .rotationEffect(.degrees(expanded ? 180 : 0))
+            }
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(LeapStyle.primaryLabel.opacity(0.05), in: .capsule)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(expanded ? "收起更多控制" : "展开更多控制")
     }
 
     private func slot(_ control: QuickControl, width: CGFloat) -> some View {
@@ -183,22 +203,6 @@ struct QuickControlBar: View {
             }
     }
 
-    private var chevron: some View {
-        Button {
-            withAnimation(.smooth) { expanded.toggle() }
-        } label: {
-            Image(systemName: "chevron.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .rotationEffect(.degrees(expanded ? 180 : 0))
-                .frame(width: 24)
-                .frame(maxHeight: .infinity)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(expanded ? "收起更多控制" : "展开更多控制")
-    }
-
     @ViewBuilder
     private func controlButton(_ control: QuickControl) -> some View {
         switch control {
@@ -206,8 +210,7 @@ struct QuickControlBar: View {
             // 上锁是回到常态，永远不上色。
             QuickControlButton(
                 title: "上锁",
-                systemImage: "car.side.lock.fill",
-                tint: .primary,
+                systemImage: "car.side.lock.fill",,
                 accessibilityValue: lockStateDescription,
                 action: store.lockCar
             )
@@ -216,8 +219,7 @@ struct QuickControlBar: View {
             // 车没锁是要提醒的反常，由这一格亮琥珀色来说。读不到锁状态时按锁着画，不上色。
             QuickControlButton(
                 title: "解锁",
-                systemImage: "car.side.lock.open.fill",
-                tint: locked ? .primary : LeapStyle.caution,
+                systemImage: "car.side.lock.open.fill",,
                 highlighted: !locked,
                 accessibilityValue: lockStateDescription,
                 action: store.unlockCar
@@ -227,8 +229,7 @@ struct QuickControlBar: View {
             QuickControlButton(
                 title: "尾门",
                 // 车尾特写的一对：同一段车尾，关着是描边、开着填实并上色。
-                systemImage: trunkOpen ? "car.side.rear.open.crop.fill" : "car.side.rear.open.crop",
-                tint: trunkOpen ? LeapStyle.caution : .primary,
+                systemImage: trunkOpen ? "car.side.rear.open.crop.fill" : "car.side.rear.open.crop",,
                 highlighted: trunkOpen,
                 accessibilityValue: store.state?.trunkOpen == nil
                     ? "状态未上报"
@@ -240,8 +241,7 @@ struct QuickControlBar: View {
         case .climate:
             QuickControlButton(
                 title: "空调",
-                systemImage: store.climateOn ? "fan.fill" : "fan",
-                tint: store.climateOn ? LeapStyle.cool : .primary,
+                systemImage: store.climateOn ? "fan.fill" : "fan",,
                 highlighted: store.climateOn,
                 accessibilityValue: store.climateOn ? "运行中" : "已关闭",
                 action: { store.applyClimate(on: !store.climateOn) }
@@ -250,8 +250,7 @@ struct QuickControlBar: View {
         case .horn:
             QuickControlButton(
                 title: "鸣笛",
-                systemImage: "speaker.wave.2.fill",
-                tint: .primary,
+                systemImage: "speaker.wave.2.fill",,
                 action: store.honk
             )
             .leapGlassID(control.rawValue, in: namespace)
@@ -260,8 +259,7 @@ struct QuickControlBar: View {
             // 就地 toggle（原哨兵卡就是这个交互），不弹层。
             QuickControlButton(
                 title: "哨兵",
-                systemImage: store.sentinelOn ? "shield.fill" : "shield",
-                tint: store.sentinelOn ? LeapStyle.cool : .primary,
+                systemImage: store.sentinelOn ? "shield.fill" : "shield",,
                 highlighted: store.sentinelOn,
                 accessibilityValue: store.sentinelOn ? "已开启" : "已关闭",
                 action: { store.applySentinel(!store.sentinelOn) }
@@ -271,16 +269,14 @@ struct QuickControlBar: View {
             // 车况里没有遮阳帘状态，图标不做两态、不上色；方向在弹层里由用户明确点。
             QuickControlButton(
                 title: "遮阳帘",
-                systemImage: "curtains.closed",
-                tint: .primary,
+                systemImage: "curtains.closed",,
                 action: { showSunshade = true }
             )
             .leapGlassID(control.rawValue, in: namespace)
         case .sunroof:
             QuickControlButton(
                 title: "天窗",
-                systemImage: "rectangle.topthird.inset.filled",
-                tint: .primary,
+                systemImage: "rectangle.topthird.inset.filled",,
                 action: { showSunroof = true }
             )
             .leapGlassID(control.rawValue, in: namespace)
@@ -288,8 +284,7 @@ struct QuickControlBar: View {
             // 车头特写的一对，和尾门那对同一个语言：关着是描边、开着填实并上色。
             QuickControlButton(
                 title: "前备箱",
-                systemImage: frunkOpen ? "car.side.front.open.crop.fill" : "car.side.front.open.crop",
-                tint: frunkOpen ? LeapStyle.caution : .primary,
+                systemImage: frunkOpen ? "car.side.front.open.crop.fill" : "car.side.front.open.crop",,
                 highlighted: frunkOpen,
                 accessibilityValue: store.state?.frontTrunkOpen == nil
                     ? "状态未上报"
@@ -330,15 +325,16 @@ struct QuickControlBar: View {
 
 /// 控车条里的一个动作。
 ///
-/// 不给底色。这一行长在一张玻璃卡里，谁激活就给谁糊一块彩色圆角底的话，卡上就多出
-/// 几块浮着的色块，和底下几张卡的排版对不上。激活状态改由图标和文字一起上色表达——
-/// 同一个信息，不额外占一层。
+/// 形态照官方 App：一枚圆形图标 + 下面一行小字。
+/// - 常态：淡灰圆底、深灰图标；
+/// - 开启：**实心绿底、白色图标**，小字跟着变绿。
 ///
-/// 图标尺寸也不跟着激活变：原来激活的那一格会从 19 涨到 21，四列的图标行就不齐了。
+/// 之前是「图标直接落在玻璃卡上、只在激活时换文字颜色」，一排看过去分不出谁开着，
+/// 而且玻璃卡和图标之间没有边界，整块看着发虚。加了圆底之后每个动作有自己的一块地方，
+/// 激活时是实心的，扫一眼就能数出开了几个。
 struct QuickControlButton: View {
     var title: String
     var systemImage: String
-    var tint: Color
     var highlighted: Bool = false
     var accessibilityValue: String?
     var action: () -> Void
@@ -348,6 +344,14 @@ struct QuickControlButton: View {
     /// Bool 从 false 翻到 true 之后，第二次按就没有「变化」可触发了。
     @State private var taps = 0
 
+    private var glyphColor: Color {
+        highlighted ? .white : LeapStyle.primaryLabel.opacity(0.72)
+    }
+
+    private var circleFill: Color {
+        highlighted ? LeapStyle.accent : LeapStyle.primaryLabel.opacity(0.06)
+    }
+
     var body: some View {
         Button {
             taps += 1
@@ -355,54 +359,55 @@ struct QuickControlButton: View {
         } label: {
             VStack(spacing: 7) {
                 ZStack {
-                    // 常亮底：这一项处于「开着」的状态时才亮（未锁车、哨兵开启……）。
-                    // 以前只把文字换色，一眼扫过去分不出哪个是开着的。
-                    Capsule(style: .continuous)
-                        .fill(tint.opacity(highlighted ? 0.20 : 0.001))
-                        .frame(width: 52, height: 34)
-                        .animation(.smooth(duration: 0.28), value: highlighted)
+                    Circle()
+                        .fill(circleFill)
+                        .frame(width: 46, height: 46)
+                        .overlay {
+                            Circle().stroke(highlighted ? .clear : LeapStyle.glassEdge, lineWidth: 0.8)
+                        }
+                        .shadow(color: highlighted ? LeapStyle.accent.opacity(0.35) : .clear,
+                                radius: 8, y: 3)
 
                     Image(systemName: systemImage)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 19, weight: .semibold))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(tint)
+                        .foregroundStyle(glyphColor)
                         .symbolEffect(.bounce, value: taps)
                         .contentTransition(.symbolEffect(.replace))
                 }
-                .frame(height: 34)
+                .animation(.smooth(duration: 0.26), value: highlighted)
 
                 Text(title)
-                    .font(.caption.weight(highlighted ? .semibold : .regular))
-                    .foregroundStyle(highlighted ? tint : LeapStyle.secondaryLabel)
+                    .font(.caption2.weight(highlighted ? .semibold : .medium))
+                    .foregroundStyle(highlighted ? LeapStyle.accent : LeapStyle.secondaryLabel)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .animation(.smooth(duration: 0.28), value: highlighted)
+                    .animation(.smooth(duration: 0.26), value: highlighted)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
+            .padding(.vertical, 2)
             .contentShape(.rect)
         }
         .disabled(disabled)
-        .buttonStyle(QuickControlPressStyle(tint: tint))
+        .buttonStyle(QuickControlPressStyle())
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityValue ?? "")
         .accessibilityHint("长按并拖动可调整位置")
     }
 }
 
-/// 按下时的反馈：整格缩一下（弹簧），底上浮一层淡色。
+/// 按下时的反馈：整格缩一下（弹簧），圆底上再浮一层淡色。
 ///
 /// 首页这些按钮很多是「按一下、等车响应」的，没有即时反馈会让人以为没点到，
 /// 于是连按三四下。缩放 + 底色是给手指的确认，不是装饰。
 private struct QuickControlPressStyle: ButtonStyle {
-    var tint: Color
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(tint.opacity(configuration.isPressed ? 0.16 : 0))
-                    .padding(.horizontal, 2)
+                Circle()
+                    .fill(LeapStyle.accent.opacity(configuration.isPressed ? 0.16 : 0))
+                    .frame(width: 58, height: 58)
+                    .offset(y: -8)
             }
             .scaleEffect(configuration.isPressed ? 0.90 : 1)
             .animation(.spring(response: 0.3, dampingFraction: 0.62), value: configuration.isPressed)
