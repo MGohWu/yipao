@@ -984,9 +984,12 @@ actor LeapClient {
         /// 分页参数用字符串（true）还是数字（false）。
         var stringPaging: Bool
         var pageSize: Int
+        /// 要不要带 `timeZone`。参考实现里国区那次充电请求带了它，行程接口的 DTO 可能也要求。
+        var withTimeZone: Bool = false
 
         var label: String {
             "\(epochSeconds ? "秒" : "日期")+\(stringPaging ? "字符串" : "数字")分页/\(pageSize)"
+                + (withTimeZone ? "+时区" : "")
         }
     }
 
@@ -997,7 +1000,11 @@ actor LeapClient {
         // 国区充电接口验证过「日期 + 字符串分页」，行程可能同族。
         .init(epochSeconds: false, stringPaging: true, pageSize: 20),
         .init(epochSeconds: false, stringPaging: false, pageSize: 20),
-        .init(epochSeconds: false, stringPaging: true, pageSize: 50)
+        .init(epochSeconds: false, stringPaging: true, pageSize: 50),
+        // 最后两种带上 timeZone：国区那次能通的充电请求里就有它，
+        // 行程的 DTO 若是同一个校验器，缺它会被判成「发生错误」。
+        .init(epochSeconds: true, stringPaging: false, pageSize: 20, withTimeZone: true),
+        .init(epochSeconds: false, stringPaging: true, pageSize: 20, withTimeZone: true)
     ]
 
     static let chargeShapes: [CloudHistoryShape] = [
@@ -1158,8 +1165,10 @@ actor LeapClient {
         // 签名只认「最终拼出来的字符串」。数字型分页参数在签名串里也是它的十进制写法，
         // 所以这里用 String(...) 拼，和 body 里是 Int 还是 String 无关。
         func params(_ page: Int) -> [String: String] {
-            ["vin": vin, "startTime": start, "endTime": end,
-             "pageNum": String(page), "pageSize": String(shape.pageSize)]
+            var params = ["vin": vin, "startTime": start, "endTime": end,
+                          "pageNum": String(page), "pageSize": String(shape.pageSize)]
+            if shape.withTimeZone { params["timeZone"] = "UTC+8" }
+            return params
         }
 
         var rows: [[String: JSONValue]] = []
@@ -1167,10 +1176,11 @@ actor LeapClient {
         for page in 1...maxPages {
             let pageValue: Any = shape.stringPaging ? String(page) : page
             let sizeValue: Any = shape.stringPaging ? String(shape.pageSize) : shape.pageSize
-            let body: [String: Any] = [
+            var body: [String: Any] = [
                 "vin": vin, "startTime": start, "endTime": end,
                 "pageNum": pageValue, "pageSize": sizeValue
             ]
+            if shape.withTimeZone { body["timeZone"] = "UTC+8" }
             let response = try await cloudHistoryRequest(
                 url: "\(host)\(path)", params: params(page), body: body
             )
