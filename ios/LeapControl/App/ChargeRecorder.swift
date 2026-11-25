@@ -39,6 +39,9 @@ final class ChargeRecorder: ObservableObject {
     private var tracker = ChargeTracker()
     private let defaults = UserDefaults(suiteName: SnapshotStore.appGroup) ?? .standard
     private static let lastSyncKey = "chargeCloudSyncAt"
+    /// 理由同 `TripRecorder.failureCooldown`：失败后别被进页面反复触发。
+    static let failureCooldown: TimeInterval = 5 * 60
+    private var failedAt: Date?
 
     private init() {
         let file = ChargeLogStore.load()
@@ -55,6 +58,7 @@ final class ChargeRecorder: ObservableObject {
     }
 
     var needsCloudSync: Bool {
+        if let failedAt, Date().timeIntervalSince(failedAt) < Self.failureCooldown { return false }
         guard let lastSyncAt else { return true }
         return Date().timeIntervalSince(lastSyncAt) >= Self.syncInterval
     }
@@ -119,11 +123,13 @@ final class ChargeRecorder: ObservableObject {
 
     func markSynced(at date: Date = .now, count: Int) {
         cloudSync = .synced(date, count)
+        failedAt = nil
         defaults.set(date, forKey: Self.lastSyncKey)
     }
 
     func markSyncFailed(_ message: String) {
         cloudSync = .failed(message)
+        failedAt = .now
     }
 
     private func record(_ charge: ChargeRecord) {

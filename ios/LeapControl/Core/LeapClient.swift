@@ -967,146 +967,232 @@ actor LeapClient {
         return nil
     }
 
-    // MARK: - 原厂逐趟行程（云端）
+    // MARK: - 原厂行程与充电记录（云端）
 
-    /// 拉零跑云端的**逐趟明细**：官方 App「行程」里那一趟趟记录就是这些数。
+    /// 云端历史接口的**请求形态**。
     ///
-    /// 端点是 `POST {appCenter}/carownerservice/mileage/daily/detail/page`，路径与入参来自
-    /// `pipipiper/leapmotor-mate-cn`（README 里记着 183 条真车记录的比对）与
-    /// `MiRaToo/LeapMore`，两边的签名方式一致，都是「7 个固定头 + 业务参数」做 HMAC-SHA256。
+    /// 为什么要有这一层：`mileage/daily/detail/page` 与 `charge/daily/detail/page` 看起来是
+    /// 同一个家族，实际入参并不通用。2026-11-25 真机实测：同一账号、同一套签名，充电接口
+    /// 吃「日期 + 字符串分页」回了成功，行程接口同样入参却回 `code=-1 发生错误`。
+    /// 而两个公开参考实现里，行程走的是「epoch 秒 + 数字分页、pageSize=20」那一套。
     ///
-    /// 这一步的意义是**把「必须开着 App 才记得到」这件事去掉**：过去 30 天的每一趟都能在
-    /// 打开页面时一次性拿回来，手机在不在线都不影响。代价是只有结算数据（起止时间、距离、
-    /// 耗电、最高车速、油耗），没有经纬度——地名仍要靠本机采到的坐标。
+    /// 没有一份文档能同时钉死两边，所以让程序自己试：**按顺序试几种形态，哪种回成功就记住哪种**
+    /// （存在 UserDefaults 里，下次直接先试它）。失败会写进诊断日志，能看出试到第几种才通。
+    struct CloudHistoryShape: Equatable {
+        /// 时间参数用 epoch 秒（true）还是 `yyyy-MM-dd`（false）。
+        var epochSeconds: Bool
+        /// 分页参数用字符串（true）还是数字（false）。
+        var stringPaging: Bool
+        var pageSize: Int
+
+        var label: String {
+            "\(epochSeconds ? "秒" : "日期")+\(stringPaging ? "字符串" : "数字")分页/\(pageSize)"
+        }
+    }
+
+    static let mileageShapes: [CloudHistoryShape] = [
+        // 参考实现（全球客户端）用的就是这一种，先试它。
+        .init(epochSeconds: true, stringPaging: false, pageSize: 20),
+        .init(epochSeconds: true, stringPaging: true, pageSize: 20),
+        // 国区充电接口验证过「日期 + 字符串分页」，行程可能同族。
+        .init(epochSeconds: false, stringPaging: true, pageSize: 20),
+        .init(epochSeconds: false, stringPaging: false, pageSize: 20),
+        .init(epochSeconds: false, stringPaging: true, pageSize: 50)
+    ]
+
+    static let chargeShapes: [CloudHistoryShape] = [
+        // 国区实测可用。
+        .init(epochSeconds: false, stringPaging: true, pageSize: 50),
+        .init(epochSeconds: false, stringPaging: true, pageSize: 20),
+        .init(epochSeconds: true, stringPaging: false, pageSize: 20),
+        .init(epochSeconds: false, stringPaging: false, pageSize: 20)
+    ]
+
+    /// 拉零跑云端的**逐趟明细**：官方 App「行程」页那一趟趟记录就是这些数。
     ///
-    /// 失败一律抛错，由调用方决定要不要降级成本机记录；这里不吞异常，否则界面会以为
-    /// 「官方就是没有记录」，那是两件完全不同的事。
-    func fetchCloudTrips(from: Date, to: Date, pageSize: Int = 50, maxPages: Int = 8) async throws -> [CloudTripRecord] {
+    /// 字段见 `CloudTripRecord`（起止毫秒时间戳、距离、耗电、最高车速、增程油耗），**没有经纬度**。
+    /// 有了它，行程记录不再依赖「App 活着」——过去 30 天打开页面就能拉下来。
+    func fetchCloudTrips(from: Date, to: Date, maxPages: Int = 6) async throws -> [CloudTripRecord] {
+        let vin = try cloudHistoryVehicle()
+        let host = try await cloudHistoryHost()
+
+        var lastError: Error?
+        var sawEmpty = false
+        for shape in Self.orderedShapes(Self.mileageShapes, key: "mileage") {
+            do {
+                let rows = try await cloudHistoryRows(
+                    host: host, path: "/carownerservice/mileage/daily/detail/page",
+                    vin: vin, from: from, to: to, shape: shape, maxPages: maxPages
+                )
+                var seen = Set<String>()
+                let records = CloudTripParser.records(from: rows, vin: vin)
+                    .filter { seen.insert($0.key).inserted }
+                    .sorted { $0.startAt > $1.startAt }
+                if records.isEmpty {
+                    // 成功但一条都没有。可能是这个区间真没有，也可能是格式不对、服务端把解析
+                    // 失败的区间当成空。先记下「能通」，继续试下一种；都空就按空返回。
+                    sawEmpty = true
+                    Self.remember(shape, key: "mileage")
+                    BLEDiagnostics.record("trip", "cloud 格式=\(shape.label) 通、但 0 趟")
+                    continue
+                }
+                Self.remember(shape, key: "mileage")
+                BLEDiagnostics.record("trip", "cloud 格式=\(shape.label) 拉到 \(records.count) 趟")
+                return records
+            } catch {
+                lastError = error
+                BLEDiagnostics.record("trip", "cloud 格式=\(shape.label) 失败：\(error.localizedDescription)")
+                if Self.isSessionExpiry(error) { throw error }
+            }
+        }
+        if sawEmpty { return [] }
+        // 五种形态全失败：再问一次「这个账号有没有这段历史」，把结论写进日志。
+        // 这一个请求能把「参数不对」和「接口对我们这个区根本没开」区分开，
+        // 否则下一轮只能继续猜参数。
+        await probeHistoryAvailability(host: host, vin: vin, kind: "mileage")
+        throw lastError ?? LeapError.server("官方行程记录读取失败")
+    }
+
+    /// 拉零跑云端的**充电明细**。字段见 `CloudChargeRecord`（度数、快慢充、充电地点 GCJ-02）。
+    func fetchCloudCharges(from: Date, to: Date, maxPages: Int = 6) async throws -> [CloudChargeRecord] {
+        let vin = try cloudHistoryVehicle()
+        let host = try await cloudHistoryHost()
+
+        var lastError: Error?
+        var sawEmpty = false
+        for shape in Self.orderedShapes(Self.chargeShapes, key: "charge") {
+            do {
+                let rows = try await cloudHistoryRows(
+                    host: host, path: "/carownerservice/charge/daily/detail/page",
+                    vin: vin, from: from, to: to, shape: shape, maxPages: maxPages
+                )
+                var seen = Set<String>()
+                let records = CloudChargeParser.records(from: rows, vin: vin)
+                    .filter { seen.insert($0.key).inserted }
+                    .sorted { $0.startAt > $1.startAt }
+                if records.isEmpty {
+                    sawEmpty = true
+                    Self.remember(shape, key: "charge")
+                    BLEDiagnostics.record("charge", "cloud 格式=\(shape.label) 通、但 0 次")
+                    continue
+                }
+                Self.remember(shape, key: "charge")
+                BLEDiagnostics.record("charge", "cloud 格式=\(shape.label) 拉到 \(records.count) 次")
+                return records
+            } catch {
+                lastError = error
+                BLEDiagnostics.record("charge", "cloud 格式=\(shape.label) 失败：\(error.localizedDescription)")
+                if Self.isSessionExpiry(error) { throw error }
+            }
+        }
+        if sawEmpty { return [] }
+        await probeHistoryAvailability(host: host, vin: vin, kind: "charge")
+        throw lastError ?? LeapError.server("官方充电记录读取失败")
+    }
+
+    /// 问云端「这个账号最早能查到哪一天」。路径和 `charge/vail/startTime/query` 同一套
+    /// （mate-cn 在国区验证过充电这一支），只用来诊断，失败也不影响主流程。
+    private func probeHistoryAvailability(host: String, vin: String, kind: String) async {
+        do {
+            let response = try await cloudHistoryRequest(
+                url: "\(host)/carownerservice/\(kind)/vail/startTime/query",
+                params: ["vin": vin], body: ["vin": vin]
+            )
+            let data = response["data"]
+            let vail = data?["vailTime"]?.stringValue ?? data?["vail_date"]?.stringValue ?? "空"
+            BLEDiagnostics.record(
+                "trip",
+                "cloud \(kind) vail 探测 成功=\(response.isSuccess) code=\(BLEDiagnostics.safeMessage(response.responseCode ?? "?")) 最早=\(BLEDiagnostics.safeMessage(vail))"
+            )
+        } catch {
+            BLEDiagnostics.record("trip", "cloud \(kind) vail 探测失败：\(BLEDiagnostics.safeMessage(error.localizedDescription))")
+        }
+    }
+
+    private func cloudHistoryVehicle() throws -> String {
         let vin = session.selectedVin
         guard !vin.isEmpty else { throw LeapError.missingVehicle }
+        return vin
+    }
+
+    private func cloudHistoryHost() async throws -> String {
         let route = try await ensureRoute()
         let host = route.appCenter.isEmpty ? route.appRegion : route.appCenter
         guard !host.isEmpty else { throw LeapError.server("车辆中心路由为空") }
+        return host
+    }
 
-        let startDay = Self.cloudHistoryDay(from)
-        let endDay = Self.cloudHistoryDay(to)
-        // 参与签名的必须是**这次真的发出去的字段**。数值型在签名串里就是它的十进制写法，
-        // 所以这里用 String(page) 和 body 里的 Int 是对得上的（服务端也这么stringify）。
+    private static func isSessionExpiry(_ error: Error) -> Bool {
+        guard let error = error as? LeapError, case .sessionExpired = error else { return false }
+        return true
+    }
+
+    private static let shapeDefaults = UserDefaults(suiteName: SnapshotStore.appGroup) ?? .standard
+
+    /// 上次成功的形态排到最前面。没记住就按默认顺序。
+    static func orderedShapes(_ shapes: [CloudHistoryShape], key: String) -> [CloudHistoryShape] {
+        guard let label = shapeDefaults.string(forKey: "cloudHistoryShape." + key),
+              let index = shapes.firstIndex(where: { $0.label == label }) else { return shapes }
+        var ordered = shapes
+        let saved = ordered.remove(at: index)
+        ordered.insert(saved, at: 0)
+        return ordered
+    }
+
+    private static func remember(_ shape: CloudHistoryShape, key: String) {
+        shapeDefaults.set(shape.label, forKey: "cloudHistoryShape." + key)
+    }
+
+    /// 按一种形态把某段时间的记录翻完。翻页过程中的任何失败都抛出去，交给上层换形态。
+    private func cloudHistoryRows(
+        host: String, path: String, vin: String,
+        from: Date, to: Date, shape: CloudHistoryShape, maxPages: Int
+    ) async throws -> [[String: JSONValue]] {
+        let start = shape.epochSeconds ? String(Int(from.timeIntervalSince1970)) : Self.cloudHistoryDay(from)
+        let end = shape.epochSeconds ? String(Int(to.timeIntervalSince1970)) : Self.cloudHistoryDay(to)
+
+        // 签名只认「最终拼出来的字符串」。数字型分页参数在签名串里也是它的十进制写法，
+        // 所以这里用 String(...) 拼，和 body 里是 Int 还是 String 无关。
         func params(_ page: Int) -> [String: String] {
-            ["vin": vin, "startTime": startDay, "endTime": endDay,
-             "pageNum": String(page), "pageSize": String(pageSize)]
+            ["vin": vin, "startTime": start, "endTime": end,
+             "pageNum": String(page), "pageSize": String(shape.pageSize)]
         }
 
-        var records: [CloudTripRecord] = []
-        var seen = Set<String>()
+        var rows: [[String: JSONValue]] = []
         var total: Int?
         for page in 1...maxPages {
+            let pageValue: Any = shape.stringPaging ? String(page) : page
+            let sizeValue: Any = shape.stringPaging ? String(shape.pageSize) : shape.pageSize
             let body: [String: Any] = [
-                "vin": vin, "startTime": startDay, "endTime": endDay,
-                "pageNum": page, "pageSize": pageSize
+                "vin": vin, "startTime": start, "endTime": end,
+                "pageNum": pageValue, "pageSize": sizeValue
             ]
             let response = try await cloudHistoryRequest(
-                url: "\(host)/carownerservice/mileage/daily/detail/page",
-                params: params(page),
-                body: body
+                url: "\(host)\(path)", params: params(page), body: body
             )
             if !response.isSuccess {
                 // mate-cn 的实测：code 100 就是「这个区间没有记录」，不是错误。
                 if response.responseCode == "100" { break }
                 let message = response.responseMessage
-                BLEDiagnostics.record(
-                    "trip",
-                    "cloud.page\(page) 失败 code=\(BLEDiagnostics.safeMessage(response.responseCode ?? "?")) "
-                        + "msg=\(BLEDiagnostics.safeMessage(message))"
-                )
-                throw LeapError.server(message.isEmpty ? "官方行程记录读取失败（\(response.responseCode ?? "?")）" : message)
+                throw LeapError.server(message.isEmpty
+                    ? "接口返回 \(response.responseCode ?? "?")"
+                    : "\(message)（\(response.responseCode ?? "?")）")
             }
             let data = response["data"]
-            let rows = data?["list"]?.arrayValue ?? []
+            let pageRows = data?["list"]?.arrayValue?.compactMap(\.objectValue) ?? []
             total = data?["total"]?.intValue ?? total
-            for row in rows {
-                guard let object = row.objectValue,
-                      let record = CloudTripParser.record(from: object, vin: vin),
-                      seen.insert(record.key).inserted else { continue }
-                records.append(record)
-            }
-            if rows.isEmpty { break }
-            if let total, records.count >= total { break }
+            rows.append(contentsOf: pageRows)
+            if pageRows.isEmpty { break }
+            if let total, rows.count >= total { break }
         }
-        BLEDiagnostics.record(
-            "trip",
-            "cloud \(startDay)~\(endDay) 拉到 \(records.count) 趟 / 云端称 \(total.map(String.init) ?? "-") 趟"
-        )
-        return records.sorted { $0.startAt > $1.startAt }
+        if let total, total > rows.count {
+            BLEDiagnostics.record("trip", "cloud 只翻到 \(rows.count)/\(total) 条，可能被截断")
+        }
+        return rows
     }
 
-    /// 拉零跑云端的**充电明细**：`POST {appCenter}/carownerservice/charge/daily/detail/page`。
-    ///
-    /// 和行程那套是同一个家族（同样的 7 头签名、同样的 `data.list` / `data.total` 分页），
-    /// 两个细节不同，抄错任何一个都会被判参数非法：
-    /// - **分页参数是字符串**（`"1"` / `"50"`），行程那边是数字；
-    /// - 上限 100 条一页，这边用 50。
-    ///
-    /// 返回里有 `chargeInEnergy`（度）和 `chargeStartLatitude/Longitude`（GCJ-02），
-    /// 所以充电记录也能做到「App 没开过也有一条，而且带地点」。
-    func fetchCloudCharges(from: Date, to: Date, pageSize: Int = 50, maxPages: Int = 8) async throws -> [CloudChargeRecord] {
-        let vin = session.selectedVin
-        guard !vin.isEmpty else { throw LeapError.missingVehicle }
-        let route = try await ensureRoute()
-        let host = route.appCenter.isEmpty ? route.appRegion : route.appCenter
-        guard !host.isEmpty else { throw LeapError.server("车辆中心路由为空") }
-
-        let startDay = Self.cloudHistoryDay(from)
-        let endDay = Self.cloudHistoryDay(to)
-        func params(_ page: Int) -> [String: String] {
-            ["vin": vin, "startTime": startDay, "endTime": endDay,
-             "pageNum": String(page), "pageSize": String(pageSize)]
-        }
-
-        var records: [CloudChargeRecord] = []
-        var seen = Set<String>()
-        var total: Int?
-        for page in 1...maxPages {
-            let body: [String: Any] = [
-                "vin": vin, "startTime": startDay, "endTime": endDay,
-                "pageNum": String(page), "pageSize": String(pageSize)
-            ]
-            let response = try await cloudHistoryRequest(
-                url: "\(host)/carownerservice/charge/daily/detail/page",
-                params: params(page),
-                body: body
-            )
-            if !response.isSuccess {
-                if response.responseCode == "100" { break }
-                let message = response.responseMessage
-                BLEDiagnostics.record(
-                    "charge",
-                    "cloud.page\(page) 失败 code=\(BLEDiagnostics.safeMessage(response.responseCode ?? "?")) "
-                        + "msg=\(BLEDiagnostics.safeMessage(message))"
-                )
-                throw LeapError.server(message.isEmpty ? "官方充电记录读取失败（\(response.responseCode ?? "?")）" : message)
-            }
-            let data = response["data"]
-            let rows = data?["list"]?.arrayValue ?? []
-            total = data?["total"]?.intValue ?? total
-            for row in rows {
-                guard let object = row.objectValue,
-                      let record = CloudChargeParser.record(from: object, vin: vin),
-                      seen.insert(record.key).inserted else { continue }
-                records.append(record)
-            }
-            if rows.isEmpty { break }
-            if let total, records.count >= total { break }
-        }
-        BLEDiagnostics.record(
-            "charge",
-            "cloud \(startDay)~\(endDay) 拉到 \(records.count) 次 / 云端称 \(total.map(String.init) ?? "-") 次"
-        )
-        return records.sorted { $0.startAt > $1.startAt }
-    }
-
-    /// 云端历史接口收的是**日期**（`yyyy-MM-dd`，本地时区），不是毫秒时间戳。
-    /// 这一点和同命名空间的 `drivingrecord/*`（收毫秒/秒）不一样，抄错会被判成参数非法。
+    /// 云端历史接口收的是**日期**（`yyyy-MM-dd`，本地时区）或 **epoch 秒**，看具体形态；
+    /// 都不是毫秒。这一点和同命名空间的 `drivingrecord/*`（收毫秒）不一样，抄错会被判参数非法。
     private static func cloudHistoryDay(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")

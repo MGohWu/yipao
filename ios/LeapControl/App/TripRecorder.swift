@@ -43,6 +43,10 @@ final class TripRecorder: ObservableObject {
     private let defaults = UserDefaults(suiteName: SnapshotStore.appGroup) ?? .standard
 
     private static let lastSyncKey = "tripCloudSyncAt"
+    /// 刚失败过就隔一会儿再试：进页面、切前后台都会触发同步，
+    /// 服务端那边不通的话，一分钟能连打七八次——这不是重试，是骚扰。
+    static let failureCooldown: TimeInterval = 5 * 60
+    private var failedAt: Date?
 
     private init() {
         trips = TripLogStore.load()
@@ -57,8 +61,9 @@ final class TripRecorder: ObservableObject {
         return nil
     }
 
-    /// 该不该现在就同步。没有同步过、或者离上次超过 6 小时。
+    /// 该不该现在就同步。没有同步过、或者离上次超过 6 小时；刚失败过则等冷却结束。
     var needsCloudSync: Bool {
+        if let failedAt, Date().timeIntervalSince(failedAt) < Self.failureCooldown { return false }
         guard let lastSyncAt else { return true }
         return Date().timeIntervalSince(lastSyncAt) >= Self.syncInterval
     }
@@ -119,11 +124,13 @@ final class TripRecorder: ObservableObject {
 
     func markSynced(at date: Date = .now, count: Int) {
         cloudSync = .synced(date, count)
+        failedAt = nil
         defaults.set(date, forKey: Self.lastSyncKey)
     }
 
     func markSyncFailed(_ message: String) {
         cloudSync = .failed(message)
+        failedAt = .now
     }
 
     /// 地名异步补齐之后回写。找不到就保持原样，不写「未知地点」这种占位。
