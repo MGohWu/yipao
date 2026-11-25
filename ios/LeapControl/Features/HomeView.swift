@@ -172,7 +172,6 @@ struct HomeView: View {
                     case .climate: ClimateView()
                     case .location: VehicleLocationView()
                     case .trips: MileageStatsView()
-                    case .tripLog: TripHistoryView()
                     case .settings: SettingsView()
                     }
                 }
@@ -1156,9 +1155,6 @@ enum HomeRoute: Hashable {
     /// 行程页：零跑官方的里程能耗（见 `MileageStatsView`）。
     /// 老深链 `mileage` / `mileageStats` 继续认，桌面上已经建好的快捷方式不能失效。
     case trips
-    /// 逐趟行程记录（见 `TripHistoryView`）。和 `.trips` 是两件事：
-    /// 那边是官方按天聚合的数，这边是 App 自己按轮询切出来的每一次出行。
-    case tripLog
     case settings
 
     init?(deepLink: String) {
@@ -1167,7 +1163,6 @@ enum HomeRoute: Hashable {
         case "climate": self = .climate
         case "location": self = .location
         case "trips", "mileage", "mileageStats": self = .trips
-        case "tripLog", "trip", "tripsLog": self = .tripLog
         case "settings": self = .settings
         default: return nil
         }

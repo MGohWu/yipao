@@ -492,6 +492,12 @@ struct VehicleState: Equatable {
         return fast == true || slow == true
     }
 
+    /// 插的是不是直流快充枪。和 `chargeGunConnected` 里的快充项同源，单独露出来给
+    /// 充电记录用——那边要区分「这趟是快充还是慢充」，只在两者的或里取不到这个信息。
+    var isFastChargingConnected: Bool {
+        raw(.fastCharging).map { $0 != "0" } ?? false
+    }
+
     /// 充电功率（kW）。车不上报功率，用电压 × 电流算——这两个都是车实报的。
     ///
     /// 电流充电时是负的（电流流进电池），取绝对值。

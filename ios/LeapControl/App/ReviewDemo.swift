@@ -208,4 +208,42 @@ enum ReviewDemo {
             )
         }
     }
+
+    /// 演示用的充电记录。和行程同理：地名用杭州的公开地标，时间相对生成，
+    /// 所以不管哪天打开演示账号，列表里都有「今天」那一次。
+    ///
+    /// 三条覆盖三种形态：夜间慢充（正常记录）、商场快充（高功率 + 直流）、
+    /// 以及一条补记（App 没在跑、靠电量差补出来的），审核一眼能看全。
+    static var chargeLog: [ChargeRecord] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        /// (往前几天, 开始时分, 持续分钟, 起电, 终电, 度数, 峰值kW, 是否快充, 地点, 是否补记)
+        let seeds: [(Int, Int, Int, Int, Int, Double, Double, Bool, String, Bool)] = [
+            (0, 22 * 60 + 10, 320, 42, 88, 38.4, 6.6, false, "滨江区江陵路 充电站", false),
+            (2, 12 * 60 + 35, 46, 28, 76, 33.1, 62.0, true, "萧山区万象汇 快充站", false),
+            (4, 21 * 60 + 5, 420, 35, 90, 43.2, 7.0, false, "滨江区江陵路 充电站", true)
+        ]
+
+        return seeds.enumerated().map { index, seed in
+            let day = calendar.date(byAdding: .day, value: -seed.0, to: today) ?? today
+            let start = calendar.date(byAdding: .minute, value: seed.1, to: day) ?? day
+            let end = calendar.date(byAdding: .minute, value: seed.1 + seed.2, to: day) ?? start
+            let latitude = 30.20835 + Double(index) * 0.006
+            let longitude = 120.21105 - Double(index) * 0.005
+            return ChargeRecord(
+                vin: nil,
+                startAt: start,
+                endAt: end,
+                startSoc: seed.3,
+                endSoc: seed.4,
+                energyKwh: seed.5,
+                maxPowerKw: seed.6,
+                isDC: seed.7,
+                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                place: seed.8,
+                isReconstructed: seed.9
+            )
+        }
+    }
 }
