@@ -344,29 +344,67 @@ struct QuickControlButton: View {
     var action: () -> Void
     var disabled: Bool = false
 
+    /// 每按一次加一，喂给 `.symbolEffect(.bounce)`。用计数而不是 Bool：
+    /// Bool 从 false 翻到 true 之后，第二次按就没有「变化」可触发了。
+    @State private var taps = 0
+
     var body: some View {
-        Button(action: action) {
+        Button {
+            taps += 1
+            action()
+        } label: {
             VStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(tint)
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 42, height: 34)
+                ZStack {
+                    // 常亮底：这一项处于「开着」的状态时才亮（未锁车、哨兵开启……）。
+                    // 以前只把文字换色，一眼扫过去分不出哪个是开着的。
+                    Capsule(style: .continuous)
+                        .fill(tint.opacity(highlighted ? 0.20 : 0.001))
+                        .frame(width: 52, height: 34)
+                        .animation(.smooth(duration: 0.28), value: highlighted)
+
+                    Image(systemName: systemImage)
+                        .font(.system(size: 20, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(tint)
+                        .symbolEffect(.bounce, value: taps)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .frame(height: 34)
+
                 Text(title)
-                    .font(.caption)
-                    .foregroundStyle(highlighted ? tint : .secondary)
+                    .font(.caption.weight(highlighted ? .semibold : .regular))
+                    .foregroundStyle(highlighted ? tint : LeapStyle.secondaryLabel)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                    .animation(.smooth(duration: 0.28), value: highlighted)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
             .contentShape(.rect)
         }
         .disabled(disabled)
-        .buttonStyle(.plain)
+        .buttonStyle(QuickControlPressStyle(tint: tint))
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityValue ?? "")
         .accessibilityHint("长按并拖动可调整位置")
+    }
+}
+
+/// 按下时的反馈：整格缩一下（弹簧），底上浮一层淡色。
+///
+/// 首页这些按钮很多是「按一下、等车响应」的，没有即时反馈会让人以为没点到，
+/// 于是连按三四下。缩放 + 底色是给手指的确认，不是装饰。
+private struct QuickControlPressStyle: ButtonStyle {
+    var tint: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(tint.opacity(configuration.isPressed ? 0.16 : 0))
+                    .padding(.horizontal, 2)
+            }
+            .scaleEffect(configuration.isPressed ? 0.90 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.62), value: configuration.isPressed)
     }
 }

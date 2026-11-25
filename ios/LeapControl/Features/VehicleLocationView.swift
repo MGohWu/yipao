@@ -25,6 +25,8 @@ struct VehicleLocationView: View {
                 VehicleMap(coordinate: coordinate,
                            vehicleName: store.vehicleName,
                            userCoordinate: userLocation.coordinate)
+                    .ignoresSafeArea()
+                mapScrims
             } else {
                 LeapBackground(tint: LeapStyle.cool)
                 ContentUnavailableView {
@@ -40,8 +42,10 @@ struct VehicleLocationView: View {
         }
         .navigationTitle("车辆位置")
         .navigationBarTitleDisplayMode(.inline)
-        // 地图不是滚动视图，导航栏拿不到滚动边缘效果，需要显式给背景，否则标题压在地图上看不清。
-        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+        // 地图铺满整屏，导航栏不能再自带一层实底——那会把地图切掉一条。
+        // 标题的可读性交给下面这层顶部渐隐。
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .task {
             userLocation.start()
         }
@@ -63,57 +67,84 @@ struct VehicleLocationView: View {
         }
     }
 
+    /// 地图上下两道渐隐。
+    ///
+    /// 官方 App 那种「地图当背景、面板浮在上面」的观感，靠的就是这两条：
+    /// 顶部压暗让导航标题和状态栏立住，底部压暗给卡片垫一层底，
+    /// 中间保持地图本来的颜色。没有它们，浅色地图上白字标题直接看不见。
+    private var mapScrims: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [Color.black.opacity(0.55), Color.black.opacity(0.22), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 190)
+
+            Spacer(minLength: 0)
+
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.18), Color.black.opacity(0.5)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 300)
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+    }
+
     private var infoCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 左文右图：地址、时间、两个距离在左边竖着排，右边一张竖着的驻车照片。
-            // 照片原来是整卡宽、高 108 的一条，`scaledToFill` + `clipped` 把竖着拍的
-            // 照片从中间横切一刀——车停在几号位、旁边是什么全被切掉了，只剩中间一条。
-            // 竖图配竖图，占的宽度还更小。
+        VStack(spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("车辆位置", systemImage: "car.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(LeapStyle.accent)
+
                     Text(store.locationName ?? "正在解析位置")
-                        .font(.headline)
+                        .font(.title3.weight(.semibold))
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     if let updated = store.lastUpdated {
                         Text("更新于 \(updated, format: .relative(presentation: .named))")
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    HStack(spacing: 16) {
-                        distanceMetric(title: "直线距离", value: straightDistanceText)
-                        // 没配高德 key 就整格不出现：这一格以前问的是苹果，市区老路里
-                        // 给出的距离常常偏大，和车标位置对不上，反而让人怀疑定位。
-                        // 要开过去点下面的「导航到车辆」就行，那条路线是准的。
-                        if DrivingRouteService.isConfigured {
-                            distanceMetric(title: drivingMetricTitle, value: drivingDistanceText)
-                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 parkingPhotoThumb
             }
-            // 这一句不能少。上面那个 Spacer 只想把两个距离压到左栏底部、跟照片底边
-            // 齐平，但整张卡是叠在全屏地图上的（外层 ZStack），高度没有上界——Spacer
-            // 会一路吃到屏幕底，卡片撑满整个地图，中间空出一大片。
-            // 固定垂直方向取理想高度后，这一行的高度就是 max(左栏文字, 照片 104)，
-            // Spacer 只在照片更高时吃掉那点差额。
-            .fixedSize(horizontal: false, vertical: true)
+
+            Rectangle()
+                .fill(LeapStyle.hairline)
+                .frame(height: 1)
+
+            HStack(spacing: 0) {
+                stat(icon: "ruler", title: "直线距离", value: straightDistanceText)
+                // 没配高德 key 就整格不出现：这一格以前问的是苹果，市区老路里
+                // 给出的距离常常偏大，和车标位置对不上，反而让人怀疑定位。
+                if DrivingRouteService.isConfigured {
+                    Rectangle().fill(LeapStyle.hairline).frame(width: 1, height: 34)
+                    stat(icon: routeModeIcon,
+                         title: drivingMetricTitle,
+                         value: drivingDistanceText)
+                }
+            }
 
             HStack(spacing: 10) {
                 Button {
                     showingMapChoices = true
                 } label: {
                     Label("导航到车辆", systemImage: "arrow.triangle.turn.up.right.circle.fill")
-                        .font(.subheadline.weight(.medium))
+                        .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
+                        .padding(.vertical, 14)
                 }
                 .leapGlassButton(prominent: true)
-                .tint(LeapStyle.cool)
+                .tint(LeapStyle.accent)
                 .disabled(coordinate == nil)
                 // iOS 26 起确认弹窗会锚定在修饰符附着的视图上弹出。
                 // 挂在最外层 ZStack 上它会锚到整屏，必须挂在触发它的按钮上。
@@ -128,18 +159,44 @@ struct VehicleLocationView: View {
                     Task { await store.refresh(showSpinner: true) }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.subheadline.weight(.medium))
-                        .frame(width: 46)
-                        .padding(.vertical, 13)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 48)
+                        .padding(.vertical, 14)
                 }
                 .leapGlassButton()
             }
-            .padding(.top, 2)
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .leapGlass(.regular, in: .rect(cornerRadius: 28))
-        .padding(14)
+        .leapGlass(.regular, in: .rect(cornerRadius: 30))
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+    }
+
+    /// 一格指标：小图标 + 标题 + 数值。两格并排时中间用一条 hairline 隔开。
+    private func stat(icon: String, title: String, value: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(LeapStyle.accent)
+                .frame(width: 30, height: 30)
+                .background(LeapStyle.accent.opacity(0.13), in: .circle)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(value)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - 驻车照片
@@ -238,6 +295,15 @@ struct VehicleLocationView: View {
         return TravelMode.preferred(forStraightDistance: Self.distance(from: user, to: vehicle))
     }
 
+    /// 那一格用走路还是开车的图标。用 switch 而不是 `==`：
+    /// `TravelMode` 没声明 `Equatable`，不给编译器机会在版本之间改变主意。
+    private var routeModeIcon: String {
+        switch routeMode {
+        case .walking: return "figure.walk"
+        case .driving: return "car.fill"
+        }
+    }
+
     private var drivingDistanceText: String {
         guard let route = drivingRoute else {
             if userLocation.coordinate == nil { return "定位中" }
@@ -248,13 +314,6 @@ struct VehicleLocationView: View {
         guard route.duration > 0 else { return formatDistance(route.distance) }
         let minutes = max(1, Int((route.duration / 60).rounded()))
         return "\(formatDistance(route.distance)) · \(minutes) 分钟"
-    }
-
-    private func distanceMetric(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.subheadline.weight(.semibold))
-        }
     }
 
     private func formatDistance(_ meters: CLLocationDistance) -> String {
@@ -563,8 +622,10 @@ private struct VehicleMap: View {
             // 别改成自绘的 Annotation —— 那等于又多一处要维护的坐标换算。
             UserAnnotation()
         }
-        .mapStyle(.standard)
-        .ignoresSafeArea(edges: .top)
+        // 平面 + 低饱和 + 去掉 POI 和路况：官方 App 那种「地图只是背景」的观感。
+        // 绝不能用 `.realistic`（3D）——国内只有大城市有高程数据，没有的地方整屏是空瓦片网格。
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted,
+                            pointsOfInterest: .excludingAll, showsTraffic: false))
         // 「回到车辆」放导航栏，不放地图上的悬浮控件：地图 ignoresSafeArea 之后，
         // 无论是 .mapControls 还是自己写的 overlay，落点都不可靠——真机上会飘。
         .toolbar {
@@ -622,8 +683,8 @@ private struct VehicleMarker: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(LeapStyle.cool.opacity(0.22))
-                .frame(width: 54, height: 54)
+                .fill(LeapStyle.accent.opacity(0.24))
+                .frame(width: 56, height: 56)
                 .scaleEffect(pulse ? 1.15 : 0.85)
                 .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: pulse)
 
@@ -631,9 +692,9 @@ private struct VehicleMarker: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
-                .background(Circle().fill(LeapStyle.cool))
+                .background(Circle().fill(LeapStyle.accent))
                 .overlay(Circle().stroke(.white, lineWidth: 2.5))
-                .shadow(color: LeapStyle.cool.opacity(0.6), radius: 8)
+                .shadow(color: LeapStyle.accent.opacity(0.55), radius: 10, y: 2)
         }
         .onAppear { pulse = true }
     }
