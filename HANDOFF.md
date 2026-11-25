@@ -132,3 +132,14 @@ open LeapControl.xcodeproj
 ### 一句话
 
 **出包不需要电脑，改代码需要。** 手机能做的上限就是触发构建、下载、签名、安装。
+
+## 八、手机上直接拿到 2.9 的产物
+
+最近一次成功的打包（提交 `00d7ae97`，就是 2.9 那一版）：
+
+- run 页面：`https://github.com/MGohWu/yipao/actions/runs/45623633655`
+- 页面最下面 **Artifacts** → `Paopao-iOS-unsigned`（约 2.4 MB）
+- 下载后是个 zip，解压得到 `跑跑-iOS-unsigned.ipa`
+- 该 artifact 保留到 2026-12-25
+
+想打新版本就按第七节重新点一次 **Run workflow**。
