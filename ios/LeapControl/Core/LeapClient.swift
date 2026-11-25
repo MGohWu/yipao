@@ -1023,28 +1023,33 @@ actor LeapClient {
         }
     }
 
+    /// 同一个东西在官方 App 里可能挂在不同前缀下。参考实现说的是第一条，
+    /// 但国区 `drivingrecord` 家族一直挂在 `v3/api/` 下面（我们已经在用的
+    /// `v3/api/drivingrecord/mileage/energy/detail` 就是），所以三条都试。
+    static let mileagePaths = [
+        "/carownerservice/mileage/daily/detail/page",
+        "/carownerservice/v3/api/drivingrecord/mileage/daily/detail/page",
+        "/carownerservice/v3/api/mileage/daily/detail/page"
+    ]
+
+    static let chargePaths = [
+        "/carownerservice/charge/daily/detail/page",
+        "/carownerservice/v3/api/charge/daily/detail/page"
+    ]
+
+    /// 每次只留三种形态：路径再多也是 3×3。试探要有限度——全失败时这已经是十来个请求，
+    /// 再多就成了拿车主的账号做暴力枚举。
     static let mileageShapes: [CloudHistoryShape] = [
-        // `carvin` 优先：国区这套 `drivingrecord` 家族全用 `carvin`（见 `getLastweekEC`），
-        // 而且「充电成功但 0 条 + 行程抛异常」这组现象正是「按 null 查车」的两种表现。
+        // `carvin` 优先：国区这套 `drivingrecord` 家族全用 `carvin`（见 `getLastweekEC`）。
         .init(vinKey: .carvin, timeStyle: .seconds, stringPaging: false, pageSize: 20),
-        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 20),
-        .init(vinKey: .carvin, timeStyle: .milliseconds, stringPaging: false, pageSize: 20),
-        .init(vinKey: .carVin, timeStyle: .seconds, stringPaging: false, pageSize: 20),
-        // 原来那套（`vin`）留作兜底。
         .init(vinKey: .vin, timeStyle: .seconds, stringPaging: false, pageSize: 20),
-        .init(vinKey: .vin, timeStyle: .day, stringPaging: true, pageSize: 20),
-        .init(vinKey: .vin, timeStyle: .milliseconds, stringPaging: false, pageSize: 20),
-        .init(vinKey: .vin, timeStyle: .day, stringPaging: false, pageSize: 20)
+        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 20)
     ]
 
     static let chargeShapes: [CloudHistoryShape] = [
-        // 国区实测「成功」，但一直是 0 条——先试 `carvin`。
-        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
-        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 20),
-        .init(vinKey: .carVin, timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
+        // 国区实测「成功」（只是 0 条），保留它；再试一次 `carvin`。
         .init(vinKey: .vin, timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
-        .init(vinKey: .vin, timeStyle: .day, stringPaging: true, pageSize: 20),
-        .init(vinKey: .vin, timeStyle: .seconds, stringPaging: false, pageSize: 20)
+        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true)
     ]
 
     /// 拉零跑云端的**逐趟明细**：官方 App「行程」页那一趟趟记录就是这些数。
@@ -1057,10 +1062,11 @@ actor LeapClient {
 
         var lastError: Error?
         var sawEmpty = false
+        for path in Self.mileagePaths {
         for shape in Self.orderedShapes(Self.mileageShapes, key: "mileage") {
             do {
                 let rows = try await cloudHistoryRows(
-                    host: host, path: "/carownerservice/mileage/daily/detail/page",
+                    host: host, path: path,
                     vin: vin, from: from, to: to, shape: shape, maxPages: maxPages
                 )
                 var seen = Set<String>()
@@ -1072,17 +1078,18 @@ actor LeapClient {
                     // 失败的区间当成空。先记下「能通」，继续试下一种；都空就按空返回。
                     sawEmpty = true
                     Self.remember(shape, key: "mileage")
-                    BLEDiagnostics.record("trip", "cloud 格式=\(shape.label) 通、但 0 趟")
+                    BLEDiagnostics.record("trip", "cloud 路径=\(path) 格式=\(shape.label) 通、但 0 趟")
                     continue
                 }
                 Self.remember(shape, key: "mileage")
-                BLEDiagnostics.record("trip", "cloud 格式=\(shape.label) 拉到 \(records.count) 趟")
+                BLEDiagnostics.record("trip", "cloud 路径=\(path) 格式=\(shape.label) 拉到 \(records.count) 趟")
                 return records
             } catch {
                 lastError = error
-                BLEDiagnostics.record("trip", "cloud 格式=\(shape.label) 失败：\(error.localizedDescription)")
+                BLEDiagnostics.record("trip", "cloud 路径=\(path) 格式=\(shape.label) 失败：\(error.localizedDescription)")
                 if Self.isSessionExpiry(error) { throw error }
             }
+        }
         }
         if sawEmpty { return [] }
         // 五种形态全失败：再问一次「这个账号有没有这段历史」，把结论写进日志。
@@ -1099,10 +1106,11 @@ actor LeapClient {
 
         var lastError: Error?
         var sawEmpty = false
+        for path in Self.chargePaths {
         for shape in Self.orderedShapes(Self.chargeShapes, key: "charge") {
             do {
                 let rows = try await cloudHistoryRows(
-                    host: host, path: "/carownerservice/charge/daily/detail/page",
+                    host: host, path: path,
                     vin: vin, from: from, to: to, shape: shape, maxPages: maxPages
                 )
                 var seen = Set<String>()
@@ -1112,17 +1120,18 @@ actor LeapClient {
                 if records.isEmpty {
                     sawEmpty = true
                     Self.remember(shape, key: "charge")
-                    BLEDiagnostics.record("charge", "cloud 格式=\(shape.label) 通、但 0 次")
+                    BLEDiagnostics.record("charge", "cloud 路径=\(path) 格式=\(shape.label) 通、但 0 次")
                     continue
                 }
                 Self.remember(shape, key: "charge")
-                BLEDiagnostics.record("charge", "cloud 格式=\(shape.label) 拉到 \(records.count) 次")
+                BLEDiagnostics.record("charge", "cloud 路径=\(path) 格式=\(shape.label) 拉到 \(records.count) 次")
                 return records
             } catch {
                 lastError = error
-                BLEDiagnostics.record("charge", "cloud 格式=\(shape.label) 失败：\(error.localizedDescription)")
+                BLEDiagnostics.record("charge", "cloud 路径=\(path) 格式=\(shape.label) 失败：\(error.localizedDescription)")
                 if Self.isSessionExpiry(error) { throw error }
             }
+        }
         }
         if sawEmpty {
             // 全是 0 条：再问一次「这段时间到底有几次充电」。统计说有几笔而我们一条都取不到，

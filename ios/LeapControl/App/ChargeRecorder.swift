@@ -41,7 +41,12 @@ final class ChargeRecorder: ObservableObject {
     private static let lastSyncKey = "chargeCloudSyncAt"
     /// 理由同 `TripRecorder.failureCooldown`：失败后别被进页面反复触发。
     static let failureCooldown: TimeInterval = 5 * 60
+    /// 连败几次就一天才试一次，理由见 `TripRecorder.giveUpAfter`。
+    static let giveUpAfter = 3
+    static let giveUpInterval: TimeInterval = 24 * 3600
     private var failedAt: Date?
+    private static let failureCountKey = "chargeCloudFailureCount"
+    var consecutiveFailures: Int { defaults.integer(forKey: Self.failureCountKey) }
 
     private init() {
         let file = ChargeLogStore.load()
@@ -58,7 +63,11 @@ final class ChargeRecorder: ObservableObject {
     }
 
     var needsCloudSync: Bool {
-        if let failedAt, Date().timeIntervalSince(failedAt) < Self.failureCooldown { return false }
+        if let failedAt {
+            let wait = consecutiveFailures >= Self.giveUpAfter
+                ? Self.giveUpInterval : Self.failureCooldown
+            if Date().timeIntervalSince(failedAt) < wait { return false }
+        }
         guard let lastSyncAt else { return true }
         return Date().timeIntervalSince(lastSyncAt) >= Self.syncInterval
     }
@@ -124,12 +133,15 @@ final class ChargeRecorder: ObservableObject {
     func markSynced(at date: Date = .now, count: Int) {
         cloudSync = .synced(date, count)
         failedAt = nil
+        defaults.set(0, forKey: Self.failureCountKey)
         defaults.set(date, forKey: Self.lastSyncKey)
     }
 
     func markSyncFailed(_ message: String) {
-        cloudSync = .failed(message)
         failedAt = .now
+        let count = consecutiveFailures + 1
+        defaults.set(count, forKey: Self.failureCountKey)
+        cloudSync = .failed(count >= Self.giveUpAfter ? "" : message)
     }
 
     private func record(_ charge: ChargeRecord) {

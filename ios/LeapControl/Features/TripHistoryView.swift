@@ -54,7 +54,7 @@ struct TripHistoryView: View {
                         RecordsEmptyCard(
                             icon: "road.lanes",
                             title: "这段时间没有行程",
-                            message: "零跑云端会存每一趟的结算数据，打开这一页就会拉下来（近 30 天），App 没开过也不影响。若刚提车或刚换账号，换到「全部」再看一眼。"
+                            message: "App 开着的时候会自己切段记录。零跑云端的逐趟明细如果能取到，这里还会多出标「官方」的记录；部分账号（尤其国区）这个接口不给数据，那就只有本机这几条。"
                         )
                     } else {
                         hero
@@ -209,12 +209,12 @@ struct TripHistoryView: View {
                 : "官方记录已同步 · \(timeText(date))"
             return .done(text)
         case .failed(let message):
-            return .failed("官方记录暂不可用：\(message)")
+            return .failure(message)
         }
     }
 
     private var footer: some View {
-        Text("标「官方」的是零跑云端的逐趟结算（距离与度数对得上官方 App）；没标的来自本机轮询，多出起终点地名与电量变化。「补记」是按里程表差估算的，只出现在官方也没有记录的那段。")
+        Text("标「官方」的是零跑云端的逐趟结算（距离与度数对得上官方 App）；没标的来自本机轮询，多出起终点地名与电量变化。「补记」是按里程表差估算的，只出现在两边都没有记录的那段。国区部分账号取不到云端明细，那时全页都只有本机记录——这是接口限制，不是漏记。")
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .multilineTextAlignment(.center)

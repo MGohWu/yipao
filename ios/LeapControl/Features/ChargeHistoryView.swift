@@ -56,7 +56,7 @@ struct ChargeHistoryView: View {
                         RecordsEmptyCard(
                             icon: "bolt.car.fill",
                             title: "这段时间没有充电",
-                            message: "零跑云端存着每一次充电的结算数据（度数、快充或慢充、充电地点），打开这一页就会拉下来，App 没开过也不影响。"
+                            message: "App 开着的时候会按电流变化自己切段。零跑云端的充电明细如果能取到，这里还会多出标「官方」的记录（带度数与地点）；取不到就只显示本机记录。"
                         )
                     } else {
                         hero
@@ -204,7 +204,7 @@ struct ChargeHistoryView: View {
                 : "官方记录已同步 · \(timeText(date))"
             return .done(text)
         case .failed(let message):
-            return .failed("官方记录暂不可用：\(message)")
+            return .failure(message)
         }
     }
 

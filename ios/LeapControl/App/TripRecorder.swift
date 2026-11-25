@@ -46,7 +46,18 @@ final class TripRecorder: ObservableObject {
     /// 刚失败过就隔一会儿再试：进页面、切前后台都会触发同步，
     /// 服务端那边不通的话，一分钟能连打七八次——这不是重试，是骚扰。
     static let failureCooldown: TimeInterval = 5 * 60
+    /// 连败这么多次就不再自动试了，改成一天一次。
+    ///
+    /// 这不是偷懒：国区的逐趟明细接口看情况是不给用的（`leapmotor-mate-cn` 的国区版
+    /// 文档也写着「官方逐笔行程导入尚未支援」）。每 6 小时打十来个注定失败的请求，
+    /// 换来的只有车主每天看到一句红字。
+    static let giveUpAfter = 3
+    static let giveUpInterval: TimeInterval = 24 * 3600
     private var failedAt: Date?
+
+    private static let failureCountKey = "tripCloudFailureCount"
+
+    var consecutiveFailures: Int { defaults.integer(forKey: Self.failureCountKey) }
 
     private init() {
         trips = TripLogStore.load()
@@ -63,7 +74,11 @@ final class TripRecorder: ObservableObject {
 
     /// 该不该现在就同步。没有同步过、或者离上次超过 6 小时；刚失败过则等冷却结束。
     var needsCloudSync: Bool {
-        if let failedAt, Date().timeIntervalSince(failedAt) < Self.failureCooldown { return false }
+        if let failedAt {
+            let wait = consecutiveFailures >= Self.giveUpAfter
+                ? Self.giveUpInterval : Self.failureCooldown
+            if Date().timeIntervalSince(failedAt) < wait { return false }
+        }
         guard let lastSyncAt else { return true }
         return Date().timeIntervalSince(lastSyncAt) >= Self.syncInterval
     }
@@ -125,12 +140,16 @@ final class TripRecorder: ObservableObject {
     func markSynced(at date: Date = .now, count: Int) {
         cloudSync = .synced(date, count)
         failedAt = nil
+        defaults.set(0, forKey: Self.failureCountKey)
         defaults.set(date, forKey: Self.lastSyncKey)
     }
 
+    /// 失败次数多了就传空串：界面据此换成一句「暂不可用」，不再把服务端原话挂在页面上。
     func markSyncFailed(_ message: String) {
-        cloudSync = .failed(message)
         failedAt = .now
+        let count = consecutiveFailures + 1
+        defaults.set(count, forKey: Self.failureCountKey)
+        cloudSync = .failed(count >= Self.giveUpAfter ? "" : message)
     }
 
     /// 地名异步补齐之后回写。找不到就保持原样，不写「未知地点」这种占位。

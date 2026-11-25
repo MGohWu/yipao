@@ -289,6 +289,8 @@ enum RecordsSyncState {
     case working
     case done(String)
     case failed(String)
+    /// 拿不到，但也不该红着脸天天报——连败几次之后就是这一档。
+    case muted(String)
 
     var icon: String {
         switch self {
@@ -296,6 +298,7 @@ enum RecordsSyncState {
         case .working: return "arrow.triangle.2.circlepath"
         case .done: return "checkmark.icloud"
         case .failed: return "exclamationmark.icloud"
+        case .muted: return "icloud.slash"
         }
     }
 
@@ -303,13 +306,20 @@ enum RecordsSyncState {
         switch self {
         case .hidden: return ""
         case .working: return "正在同步零跑云端记录…"
-        case .done(let text), .failed(let text): return text
+        case .done(let text), .failed(let text), .muted(let text): return text
         }
     }
 
     var tint: Color {
         if case .failed = self { return LeapStyle.caution }
         return LeapStyle.secondaryLabel
+    }
+
+    /// 失败消息为空 = 已经放弃自动重试，用一句安静的说明代替报错。
+    static func failure(_ message: String) -> RecordsSyncState {
+        message.isEmpty
+            ? .muted("官方明细暂不可用，下面的记录都来自本机")
+            : .failed("官方记录暂不可用：\(message)")
     }
 }
 
