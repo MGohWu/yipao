@@ -124,7 +124,7 @@ struct TripHistoryView: View {
                         tripRow(trip)
                         if index < trips.count - 1 {
                             Rectangle()
-                                .fill(.quaternary)
+                                .fill(LeapStyle.hairline)
                                 .frame(height: 1)
                                 .padding(.vertical, 11)
                         }

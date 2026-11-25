@@ -148,8 +148,9 @@ struct RecordsHero: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(value)
-                        .font(.system(size: 40, weight: .semibold, design: .rounded))
+                        .font(.system(size: 44, weight: .semibold, design: .rounded))
                         .monospacedDigit()
+                        .tracking(-1)
                         .contentTransition(.numericText())
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -162,13 +163,13 @@ struct RecordsHero: View {
                 barChart
 
                 Rectangle()
-                    .fill(.quaternary)
+                    .fill(LeapStyle.hairline)
                     .frame(height: 1)
 
                 HStack(alignment: .top, spacing: 0) {
                     ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
                         if index > 0 {
-                            Rectangle().fill(.quaternary).frame(width: 1, height: 26)
+                            Rectangle().fill(LeapStyle.hairline).frame(width: 1, height: 26)
                         }
                         VStack(spacing: 3) {
                             Text(metric.title)
@@ -271,7 +272,7 @@ struct RecordsDayHeader: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Rectangle()
-                .fill(.quaternary)
+                .fill(LeapStyle.hairline)
                 .frame(height: 1)
             Text(summary)
                 .font(.caption2)

@@ -10,8 +10,8 @@ settings:
   base:
     # 这两项会生成 CFBundleShortVersionString / CFBundleVersion。
     # 缺了它们，App 扩展安装时会报 "Invalid placeholder attributes"。
-    MARKETING_VERSION: "2.6"
-    CURRENT_PROJECT_VERSION: "1795608593"
+    MARKETING_VERSION: "2.7"
+    CURRENT_PROJECT_VERSION: "1795610175"
     SWIFT_VERSION: "6.0"
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     # 填你自己的 Apple Team ID（10 位），见 README「签名」。
@@ -35,7 +35,7 @@ targets:
         INFOPLIST_FILE: LeapControl/Info.plist
         # 让 Xcode 把 CFBundleIdentifier 等标准键合并进上面这份手写 plist。
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: 跑跑
+        INFOPLIST_KEY_CFBundleDisplayName: Leap跑
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
@@ -68,7 +68,7 @@ targets:
         PRODUCT_NAME: LeapWidget
         INFOPLIST_FILE: LeapWidget/Info.plist
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: 跑跑
+        INFOPLIST_KEY_CFBundleDisplayName: Leap跑
         CODE_SIGN_ENTITLEMENTS: LeapWidget/LeapWidget.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: LeapControl/Core/GMCrypto/LeapGMCrypto.h
         SKIP_INSTALL: YES

@@ -126,7 +126,7 @@ struct ChargeHistoryView: View {
                         chargeRow(charge)
                         if index < charges.count - 1 {
                             Rectangle()
-                                .fill(.quaternary)
+                                .fill(LeapStyle.hairline)
                                 .frame(height: 1)
                                 .padding(.vertical, 11)
                         }

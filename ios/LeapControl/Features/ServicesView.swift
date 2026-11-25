@@ -77,7 +77,7 @@ struct ServicesView: View {
                         detail: weekTrips.isEmpty ? "没有行程" : "\(weekTrips.count) 趟",
                         tint: LeapStyle.accent
                     )
-                    Rectangle().fill(.quaternary).frame(width: 1, height: 46)
+                    Rectangle().fill(LeapStyle.hairline).frame(width: 1, height: 46)
                         .padding(.horizontal, 4)
                     bigStat(
                         title: "充电",
@@ -128,7 +128,7 @@ struct ServicesView: View {
     }
 
     private var separator: some View {
-        Rectangle().fill(.quaternary).frame(height: 1).padding(.vertical, 12)
+        Rectangle().fill(LeapStyle.hairline).frame(height: 1).padding(.vertical, 12)
     }
 
     private func row(

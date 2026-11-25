@@ -1,79 +1,83 @@
 import SwiftUI
 import UIKit
 
-/// 全局视觉语言。液态玻璃需要底下有内容才有折射感，
-/// 所以背景不是纯色，而是随车辆状态变化的渐变 + 光晕。
+/// 全局视觉语言。
+///
+/// 这一版整体往「深海 + 极光」走：底色是深的靛蓝，顶部一团随车况变化的极光，
+/// 卡片浮在上面靠的是玻璃折射而不是描边。配色从图标来——墨蓝底 + 薄荷绿主色，
+/// 暖橙只留给「要注意」和「在充电」这类状态。
 enum LeapStyle {
-    static let cardRadius: CGFloat = 26
-    static let tileRadius: CGFloat = 22
+    static let cardRadius: CGFloat = 28
+    static let tileRadius: CGFloat = 24
 
     // MARK: - 配色
     //
-    // 这五个色都是明暗两套。原来只有一套（现在的深色版），是照着深色底调的，
-    // 放到浅色玻璃上当文字用全部不及格——实测对比度：
-    // 除霜 1.5:1、快速降温 2.2:1、快速制热 2.1:1，WCAG AA 要求 4.5:1。
-    // 浅色版是把同一个色相压暗、加饱和，重新量过都在 4.7:1 以上。
+    // 五组色都是明暗两套。浅色版是压暗过的——同一套颜色铺在浅色玻璃上当文字，
+    // 对比度不够（WCAG AA 要 4.5:1）；深色版则是提亮过的，放在深底上才立得起来。
     //
-    // 注意：这些色同时被拿去画背景光晕。光晕是大面积色块，用不了压暗的版本，
-    // 所以 LeapBackground 在浅色模式下会先把 tint 往白里调，见那边的说明。
+    // 注意：这些色同时被拿去画背景的极光。极光是大面积色块，用不了压暗的版本，
+    // 所以 `LeapBackground` 会按明暗各自混色，见那边的说明。
 
+    /// 主色：薄荷绿。锁、充电、选中的 Tab 都用它。
     static let accent = adaptive(
-        light: Color(red: 0.03, green: 0.44, blue: 0.24),
-        dark: Color(red: 0.30, green: 0.77, blue: 0.49)
+        light: Color(red: 0.02, green: 0.46, blue: 0.36),
+        dark: Color(red: 0.38, green: 0.92, blue: 0.74)
     )
+    /// 冷色：天青。位置、导航、次要图表。
     static let cool = adaptive(
-        light: Color(red: 0.13, green: 0.36, blue: 0.78),
-        dark: Color(red: 0.42, green: 0.66, blue: 1.0)
+        light: Color(red: 0.10, green: 0.33, blue: 0.72),
+        dark: Color(red: 0.44, green: 0.72, blue: 1.0)
     )
+    /// 暖色：琥珀。加热、充电中、快充。
     static let warm = adaptive(
-        light: Color(red: 0.72, green: 0.28, blue: 0.03),
-        dark: Color(red: 1.0, green: 0.55, blue: 0.35)
+        light: Color(red: 0.74, green: 0.40, blue: 0.02),
+        dark: Color(red: 1.0, green: 0.72, blue: 0.38)
     )
+    /// 提醒：补记、失败、没关好的门。
     static let caution = adaptive(
         light: Color(red: 0.62, green: 0.36, blue: 0.0),
         dark: Color(red: 1.0, green: 0.82, blue: 0.54)
     )
 
     /// 除霜专用。不能用 `.primary`：深色模式下它是纯白，玻璃按钮被白色一染就成了亮底，
-    /// 排在快速降温、快速制热旁边活像已经选中。也不能用低饱和的灰蓝——`.glass` 的底色
-    /// 是跟着 tint 的饱和度走的，越接近灰就越白，一样会亮出来。
-    /// 所以给一个和 cool/warm 饱和度相当、色相又岔开的冰蓝／深青。
+    /// 排在快速降温、快速制热旁边活像已经选中。
     static let frost = adaptive(
         light: Color(red: 0.02, green: 0.42, blue: 0.48),
         dark: Color(red: 0.36, green: 0.86, blue: 0.90)
     )
 
     /// 「有值但不是当前重点」的填充，比如空调关着时亮起的风量柱。
-    /// 原来直接写 `Color.primary.opacity(0.6)`，深色下是柔和的浅灰，
-    /// 浅色下 primary 翻成黑，就变成一排很重的深灰块。
     static let mutedFill = adaptive(
         light: Color(white: 0.52),
         dark: Color(white: 1.0).opacity(0.6)
     )
 
-    /// 首页那辆车的填充。同样不能用 `.primary`——浅色下会变成一整块纯黑剪影。
+    /// 首页那辆车的填充。不能用 `.primary`——浅色下会变成一整块纯黑剪影。
     static let vehicleSilhouette = adaptive(
-        light: Color(white: 0.46),
-        dark: Color(white: 1.0).opacity(0.88)
+        light: Color(white: 0.44),
+        dark: Color(white: 1.0).opacity(0.9)
     )
 
     /// `.primary` / `.secondary` 的**具体颜色**版本，专门给 `.tint(...)` 用。
     ///
     /// 这两个语义值本身是 `HierarchicalShapeStyle`，不是 `Color`。把它们喂给 tint，
-    /// 在 iOS 26 的液态玻璃上会绕成死循环：玻璃材质要解析 tint → 层次样式要算 fallbackColor
-    /// → 又回头问材质要底色 → 再解析 tint……主线程两千多帧后栈溢出，
-    /// 崩在弹窗呈现那一刻（TestFlight 1787199222 / 1787295067 两条崩溃就是这个）。
-    ///
-    /// 走 UIKit 的 label 色拿一个实打实的动态颜色，明暗两套和 `.primary` 一模一样，
-    /// 只是不再是层次样式，玻璃拿到它就直接用了，不会反过来求值。
+    /// 在 iOS 26 的液态玻璃上会绕成死循环（要解析 tint → 要算 fallbackColor → 又回头问材质），
+    /// 主线程两千多帧后栈溢出。走 UIKit 的 label 色拿一个实打实的动态颜色，明暗两套和
+    /// `.primary` 一模一样，只是不再是层次样式。
     static let primaryLabel = Color(uiColor: .label)
     static let secondaryLabel = Color(uiColor: .secondaryLabel)
 
     /// 玻璃降级后的边缘线。iOS 26 的液态玻璃自带边缘高光，低版本的毛玻璃没有，
-    /// 卡片和背景会糊成一片，得手动描一道。深色下是白边（高光），浅色下是黑边（阴影）。
+    /// 卡片和背景会糊成一片，得手动描一道。
     static let glassEdge = adaptive(
-        light: Color.black.opacity(0.09),
-        dark: Color.white.opacity(0.16)
+        light: Color.black.opacity(0.08),
+        dark: Color.white.opacity(0.14)
+    )
+
+    /// 卡片里那条分隔线。比 `.quaternary` 更淡一点，成排卡片看着才不吵。
+    static let hairline = adaptive(
+        light: Color.black.opacity(0.07),
+        dark: Color.white.opacity(0.09)
     )
 
     /// SwiftUI 没有直接声明明暗两套颜色的写法，绕一下 UIKit。
@@ -84,76 +88,123 @@ enum LeapStyle {
     }
 }
 
-/// 车辆主视觉背景：充电时偏绿、空调制热时偏暖，其余偏冷蓝。
+/// 车辆主视觉背景：充电时偏薄荷、空调制热时偏暖，其余偏靛蓝。
+///
+/// 上一版是叠几个椭圆光晕；这一版换成 `MeshGradient`（iOS 18 起），
+/// 九宫格的顶点颜色互相插值，出来的是一整片有走向的极光，而不是三个圆。
+/// 下面再压一层暗角，让四周收进去——「大气」靠的就是这个收边，
+/// 光晕铺满整屏反而平。
 struct LeapBackground: View {
     var tint: Color
     @Environment(\.colorScheme) private var colorScheme
 
     private var isDark: Bool { colorScheme == .dark }
 
-    /// 光晕用的颜色。浅色模式下先把 tint 往白里调再用：
-    /// 那几个主题色的浅色版是压暗过的（为了当文字能读），原样铺成一大片光晕
-    /// 会在屏幕顶上糊出一块脏。光晕只要色相，不需要对比度。
-    ///
-    /// 混白的比例原来是 70%，冲得太狠——整屏基本剩下灰，玻璃卡片浮在灰上
-    /// 没有可折射的东西，看着就是「素」。降到 40%：色相回来了，又还没到糊脏的程度。
-    private var glow: Color {
-        isDark ? tint : tint.mix(with: .white, by: 0.32)
-    }
-
-    /// 浅色底色。原来是中性灰（0.99 → 0.88），和玻璃、和光晕都不搭腔，
-    /// 而且太白——白底上液态玻璃没有可折射的东西，卡片和背景糊成一片。
-    ///
-    /// 换成带冷调的灰，并且**从上往下明显压深**：顶部留亮（车模在那儿，深了压车），
-    /// 中下部是卡片扎堆的地方，底色够深卡片的边缘和高光才立得起来。
-    private static let lightBase = [
-        Color(red: 0.95, green: 0.96, blue: 0.98),
-        Color(red: 0.88, green: 0.91, blue: 0.95),
-        Color(red: 0.78, green: 0.83, blue: 0.90)
-    ]
-
     var body: some View {
         ZStack {
+            if isDark { darkLayers } else { lightLayers }
+            vignette
+        }
+        .ignoresSafeArea()
+        .animation(.smooth(duration: 1.1), value: tint)
+    }
+
+    // MARK: - 深色：深海 + 极光
+
+    private var darkLayers: some View {
+        ZStack {
             LinearGradient(
-                colors: isDark
-                    ? [Color(white: 0.09), Color(white: 0.04), .black]
-                    : Self.lightBase,
+                colors: [
+                    Color(red: 0.04, green: 0.10, blue: 0.17),
+                    Color(red: 0.02, green: 0.05, blue: 0.10),
+                    .black
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .ignoresSafeArea()
 
-            // 顶部光晕给玻璃提供折射源，否则玻璃在纯色背景上几乎看不见。
-            EllipticalGradient(
-                colors: [glow.opacity(isDark ? 0.45 : 0.68), .clear],
-                center: .init(x: 0.5, y: 0.06),
-                startRadiusFraction: 0,
-                endRadiusFraction: 0.75
+            MeshGradient(
+                width: 3,
+                height: 3,
+                points: [
+                    [0, 0], [0.5, 0], [1, 0],
+                    [0, 0.5], [0.55, 0.42], [1, 0.5],
+                    [0, 1], [0.5, 1], [1, 1]
+                ],
+                colors: [
+                    tint.mix(with: Color(red: 0.02, green: 0.10, blue: 0.18), by: 0.55),
+                    tint.mix(with: .black, by: 0.55),
+                    LeapStyle.cool.mix(with: .black, by: 0.50),
+                    Color(red: 0.03, green: 0.08, blue: 0.14),
+                    Color(red: 0.06, green: 0.15, blue: 0.22),
+                    LeapStyle.cool.mix(with: .black, by: 0.72),
+                    .black,
+                    Color(red: 0.02, green: 0.05, blue: 0.09),
+                    LeapStyle.cool.mix(with: .black, by: 0.84)
+                ]
             )
-            .ignoresSafeArea()
-
-            EllipticalGradient(
-                colors: [(isDark ? LeapStyle.cool : LeapStyle.cool.mix(with: .white, by: 0.32)).opacity(isDark ? 0.24 : 0.5), .clear],
-                center: .init(x: 0.9, y: 0.8),
-                startRadiusFraction: 0,
-                endRadiusFraction: 0.62
-            )
-            .ignoresSafeArea()
-
-            // 左下再补一团，压住那个角。两团光晕分别在右下和顶部，浅色下左下角
-            // 是整屏唯一一块什么都没有的地方，卡片落在那儿边缘会消失。
-            // 用 tint 的补色方向（accent）而不是再来一团 cool，免得整屏只有一个色相。
-            if !isDark {
-                EllipticalGradient(
-                    colors: [LeapStyle.accent.mix(with: .white, by: 0.45).opacity(0.36), .clear],
-                    center: .init(x: 0.02, y: 0.62),
-                    startRadiusFraction: 0,
-                    endRadiusFraction: 0.5
-                )
-                .ignoresSafeArea()
-            }
+            .opacity(0.92)
         }
-        .animation(.smooth(duration: 0.9), value: tint)
+    }
+
+    // MARK: - 浅色：珍珠 + 淡蓝
+
+    private var lightLayers: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.97, green: 0.98, blue: 1.0),
+                    Color(red: 0.92, green: 0.95, blue: 0.99),
+                    Color(red: 0.84, green: 0.89, blue: 0.96)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            MeshGradient(
+                width: 3,
+                height: 3,
+                points: [
+                    [0, 0], [0.5, 0], [1, 0],
+                    [0, 0.5], [0.55, 0.42], [1, 0.5],
+                    [0, 1], [0.5, 1], [1, 1]
+                ],
+                colors: [
+                    tint.mix(with: .white, by: 0.45),
+                    tint.mix(with: .white, by: 0.72),
+                    LeapStyle.cool.mix(with: .white, by: 0.66),
+                    Color(red: 0.96, green: 0.975, blue: 0.995),
+                    Color(red: 0.94, green: 0.965, blue: 0.99),
+                    LeapStyle.cool.mix(with: .white, by: 0.76),
+                    Color(red: 0.86, green: 0.90, blue: 0.96),
+                    Color(red: 0.91, green: 0.94, blue: 0.985),
+                    LeapStyle.cool.mix(with: .white, by: 0.62)
+                ]
+            )
+            .opacity(0.95)
+
+            // 顶部一道细高光，像屏幕边缘的反光。浅色下没有它，整片会显得平。
+            LinearGradient(
+                colors: [.white.opacity(0.55), .clear],
+                startPoint: .top,
+                endPoint: .init(x: 0.5, y: 0.28)
+            )
+            .blendMode(.plusLighter)
+        }
+    }
+
+    /// 暗角。四周压暗、中间留亮，视觉重心自然收到车辆和卡片上。
+    private var vignette: some View {
+        RadialGradient(
+            colors: [
+                .clear,
+                .clear,
+                Color.black.opacity(isDark ? 0.55 : 0.16)
+            ],
+            center: .init(x: 0.5, y: 0.38),
+            startRadius: 60,
+            endRadius: 620
+        )
     }
 }
 
@@ -165,7 +216,7 @@ struct GlassCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(16)
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
             .leapGlass(
                 tint.map { LeapGlass.regular.tint($0.opacity(0.5)) } ?? .regular,
@@ -184,7 +235,7 @@ struct GlassActionCard<Content: View>: View {
     var body: some View {
         Button(action: action) {
             content
-                .padding(16)
+                .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(.rect(cornerRadius: radius))
         }
@@ -202,7 +253,7 @@ struct CardLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.caption)
+            .font(.caption.weight(.medium))
             .foregroundStyle(.secondary)
     }
 }
@@ -219,6 +270,7 @@ struct MetricValue: View {
             Text(value)
                 .font(.system(size: size, weight: weight, design: .rounded))
                 .monospacedDigit()
+                .tracking(-0.5)
                 .contentTransition(.numericText())
             if let unit {
                 Text(unit)
@@ -236,9 +288,7 @@ struct StatusPill: View {
     var tint: Color
 
     /// 高度得定死，不能交给 `Label` 撑。撑出来的是 max(符号占位, 文字行高)，
-    /// 而 SF Symbol 在同一字号下高矮并不齐：12pt/medium 实测 `car.side.lock.fill`
-    /// 连 padding 一共 30pt、`steeringwheel` 28pt、`car.side.rear.open.crop.fill`
-    /// 只有 27pt。几颗并排一行，底边就参差。
+    /// 而 SF Symbol 在同一字号下高矮并不齐：几颗并排一行，底边就参差。
     /// 跟着 caption 缩放，动态字号调大时胶囊照样长高。
     @ScaledMetric(relativeTo: .caption) private var height: CGFloat = 28
 
@@ -314,10 +364,6 @@ struct FlowLayout: Layout {
 extension View {
     /// `navigationSubtitle` 是 iOS 26 才有的槽位，但首页副标题承载的是「等待车辆响应」
     /// 「有车门未关闭」这类必须看见的状态，不能在低版本上悄悄丢掉。
-    /// 低版本改用导航栏中央的自定义视图，把标题和副标题摞成两行。
-    ///
-    /// 导航栏的高度不跟着动态字号长，所以副标题限一行并允许缩放——
-    /// 缩到看不清也没关系，VoiceOver 读的是完整文本。
     @ViewBuilder
     func leapNavigationSubtitle(_ subtitle: String, title: String) -> some View {
         if #available(iOS 26.0, *) {
