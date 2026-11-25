@@ -988,6 +988,14 @@ actor LeapClient {
             case day
         }
 
+        /// 车身号放哪个字段。国区 `drivingrecord/*` 用 `carvin`，全球客户端的这两个
+        /// 历史接口用 `vin`。服务端查不到车时的表现正好能解释我们看到的两件事：
+        /// 充电明细**成功但 0 条**（按 null 查，空结果），行程明细**抛异常**（null 进 NPE）。
+        enum VinKey: String, Equatable, CaseIterable {
+            case carvin, vin, carVin
+        }
+
+        var vinKey: VinKey = .vin
         var timeStyle: TimeStyle
         /// 分页参数用字符串（true）还是数字（false）。
         var stringPaging: Bool
@@ -1007,7 +1015,8 @@ actor LeapClient {
         }
 
         var label: String {
-            timeLabel
+            vinKey.rawValue + "/"
+                + timeLabel
                 + "+" + (stringPaging ? "字符串" : "数字") + "分页/" + String(pageSize)
                 + (endNextDay ? "+明日" : "")
                 + (withTimeZone ? "+时区" : "")
@@ -1015,25 +1024,27 @@ actor LeapClient {
     }
 
     static let mileageShapes: [CloudHistoryShape] = [
-        // 参考实现的入参，但结束时间会被夹到「此刻」（见 `cloudHistoryRows`）——
-        // mate-cn 自己取里程时也写的是 `min(end, time.time())`，说明这个接口不收未来时间。
-        // 之前 7 种形态全失败，最可能就是因为我们把 endTime 传成了明天。
-        .init(timeStyle: .seconds, stringPaging: false, pageSize: 20),
-        .init(timeStyle: .milliseconds, stringPaging: false, pageSize: 20),
-        .init(timeStyle: .seconds, stringPaging: true, pageSize: 20),
-        .init(timeStyle: .milliseconds, stringPaging: true, pageSize: 20),
-        .init(timeStyle: .day, stringPaging: true, pageSize: 20),
-        .init(timeStyle: .day, stringPaging: true, pageSize: 20, endNextDay: true),
-        .init(timeStyle: .day, stringPaging: false, pageSize: 20),
-        .init(timeStyle: .day, stringPaging: true, pageSize: 50)
+        // `carvin` 优先：国区这套 `drivingrecord` 家族全用 `carvin`（见 `getLastweekEC`），
+        // 而且「充电成功但 0 条 + 行程抛异常」这组现象正是「按 null 查车」的两种表现。
+        .init(vinKey: .carvin, timeStyle: .seconds, stringPaging: false, pageSize: 20),
+        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 20),
+        .init(vinKey: .carvin, timeStyle: .milliseconds, stringPaging: false, pageSize: 20),
+        .init(vinKey: .carVin, timeStyle: .seconds, stringPaging: false, pageSize: 20),
+        // 原来那套（`vin`）留作兜底。
+        .init(vinKey: .vin, timeStyle: .seconds, stringPaging: false, pageSize: 20),
+        .init(vinKey: .vin, timeStyle: .day, stringPaging: true, pageSize: 20),
+        .init(vinKey: .vin, timeStyle: .milliseconds, stringPaging: false, pageSize: 20),
+        .init(vinKey: .vin, timeStyle: .day, stringPaging: false, pageSize: 20)
     ]
 
     static let chargeShapes: [CloudHistoryShape] = [
-        // 国区实测可用：日期 + 字符串分页 + 50 + 明天。
-        .init(timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
-        .init(timeStyle: .day, stringPaging: true, pageSize: 20),
-        .init(timeStyle: .seconds, stringPaging: false, pageSize: 20),
-        .init(timeStyle: .milliseconds, stringPaging: false, pageSize: 20)
+        // 国区实测「成功」，但一直是 0 条——先试 `carvin`。
+        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
+        .init(vinKey: .carvin, timeStyle: .day, stringPaging: true, pageSize: 20),
+        .init(vinKey: .carVin, timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
+        .init(vinKey: .vin, timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
+        .init(vinKey: .vin, timeStyle: .day, stringPaging: true, pageSize: 20),
+        .init(vinKey: .vin, timeStyle: .seconds, stringPaging: false, pageSize: 20)
     ]
 
     /// 拉零跑云端的**逐趟明细**：官方 App「行程」页那一趟趟记录就是这些数。
@@ -1113,9 +1124,36 @@ actor LeapClient {
                 if Self.isSessionExpiry(error) { throw error }
             }
         }
-        if sawEmpty { return [] }
+        if sawEmpty {
+            // 全是 0 条：再问一次「这段时间到底有几次充电」。统计说有几笔而我们一条都取不到，
+            // 就说明不是没数据，是我们没查对车——这比继续猜字段有用。
+            await probeChargeStatistics(host: host, vin: vin, from: from, to: to)
+            return []
+        }
         await probeHistoryAvailability(host: host, vin: vin, kind: "charge")
         throw lastError ?? LeapError.server("官方充电记录读取失败")
+    }
+
+    /// 问云端「这段时间有几次充电」。只用来判断「0 条」是真的没有，还是我们查错了车。
+    private func probeChargeStatistics(host: String, vin: String, from: Date, to: Date) async {
+        let start = Self.cloudHistoryDay(from)
+        let end = Self.cloudHistoryDay(min(to, Date()).addingTimeInterval(86_400))
+        do {
+            let response = try await cloudHistoryRequest(
+                url: "\(host)/carownerservice/charge/statistic/days",
+                params: ["vin": vin, "startTime": start, "endTime": end],
+                body: ["vin": vin, "startTime": start, "endTime": end]
+            )
+            let data = response["data"]
+            let count = data?["totalChargeCounts"]?.stringValue ?? "?"
+            let energy = data?["totalChargeInEnergy"]?.stringValue ?? "?"
+            BLEDiagnostics.record(
+                "charge",
+                "cloud 统计探测 成功=\(response.isSuccess) 次数=\(BLEDiagnostics.safeMessage(count)) 度数=\(BLEDiagnostics.safeMessage(energy))"
+            )
+        } catch {
+            BLEDiagnostics.record("charge", "cloud 统计探测失败：\(BLEDiagnostics.safeMessage(error.localizedDescription))")
+        }
     }
 
     /// 问云端「这个账号最早能查到哪一天」。路径和 `charge/vail/startTime/query` 同一套
@@ -1201,7 +1239,7 @@ actor LeapClient {
         // 签名只认「最终拼出来的字符串」。数字型分页参数在签名串里也是它的十进制写法，
         // 所以这里用 String(...) 拼，和 body 里是 Int 还是 String 无关。
         func params(_ page: Int) -> [String: String] {
-            var params = ["vin": vin, "startTime": start, "endTime": end,
+            var params = [shape.vinKey.rawValue: vin, "startTime": start, "endTime": end,
                           "pageNum": String(page), "pageSize": String(shape.pageSize)]
             if shape.withTimeZone { params["timeZone"] = "UTC+8" }
             return params
@@ -1213,7 +1251,7 @@ actor LeapClient {
             let pageValue: Any = shape.stringPaging ? String(page) : page
             let sizeValue: Any = shape.stringPaging ? String(shape.pageSize) : shape.pageSize
             var body: [String: Any] = [
-                "vin": vin, "startTime": start, "endTime": end,
+                shape.vinKey.rawValue: vin, "startTime": start, "endTime": end,
                 "pageNum": pageValue, "pageSize": sizeValue
             ]
             if shape.withTimeZone { body["timeZone"] = "UTC+8" }

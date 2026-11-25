@@ -883,6 +883,14 @@ final class VehicleStore {
         }
     }
 
+    /// 界面上只留一句人话。完整报错（带服务端 code、我们发出去的区间）交给诊断日志，
+    /// 卡片上挂一串括号里的话既难读、也没人看得懂。
+    static func shortErrorText(_ error: Error) -> String {
+        let text = error.localizedDescription
+        let head = text.split(separator: "（").first.map(String.init) ?? text
+        return head.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 拉一次零跑云端的逐趟明细，合进本机列表。
     ///
     /// 放在 `VehicleStore` 是因为只有它手里有 `LeapClient`（带登录态和车辆路由）。
@@ -905,7 +913,7 @@ final class VehicleStore {
             TripRecorder.shared.markSynced(count: records.count)
         } catch {
             // 这里不 show(error:)：行程页自己会显示「官方记录暂不可用」，再弹一次扰民。
-            TripRecorder.shared.markSyncFailed(error.localizedDescription)
+            TripRecorder.shared.markSyncFailed(Self.shortErrorText(error))
         }
     }
 
@@ -926,7 +934,7 @@ final class VehicleStore {
             ChargeRecorder.shared.mergeCloud(records)
             ChargeRecorder.shared.markSynced(count: records.count)
         } catch {
-            ChargeRecorder.shared.markSyncFailed(error.localizedDescription)
+            ChargeRecorder.shared.markSyncFailed(Self.shortErrorText(error))
         }
     }
 
