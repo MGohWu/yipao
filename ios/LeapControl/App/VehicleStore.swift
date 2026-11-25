@@ -894,8 +894,11 @@ final class VehicleStore {
 
         let now = Date()
         let from = now.addingTimeInterval(-Double(TripRecorder.syncWindowDays) * 86_400)
+        // 结束日期给**明天**：云端这个接口的 `endTime` 是「不含」的（mate-cn 按月拉历史时，
+        // 月的终点就是下个月 1 号）。传今天会把今天这一整天漏掉，看起来像「今天的行程没记上」。
+        let to = now.addingTimeInterval(86_400)
         do {
-            let records = try await client.fetchCloudTrips(from: from, to: now)
+            let records = try await client.fetchCloudTrips(from: from, to: to)
             TripRecorder.shared.mergeCloud(records)
             TripRecorder.shared.markSynced(count: records.count)
         } catch {
