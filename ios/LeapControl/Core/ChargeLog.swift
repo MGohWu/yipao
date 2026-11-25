@@ -240,7 +240,11 @@ struct ChargeTracker {
 
         // 这一帧刚结算掉一条，就先不另开——下一帧（10 秒后）再开，避免补记和
         // 新会话在同一时刻首尾相接时算重。用户看不出这 10 秒的差别。
-        if active == nil, completed.isEmpty, isAlive(sample) {
+        //
+        // **开会话必须用 `isFlowing`，不能用 `isAlive`**：后者把「插着枪」也算活着，
+        // 拿它开会话会把「插枪待充」「预约等待」全记成一次零度电的充电。这个区别
+        // 正是 mate 当年加 `charge_deferred` 的原因。
+        if active == nil, completed.isEmpty, isFlowing(sample) {
             begin(with: sample, vin: vin)
         }
 
