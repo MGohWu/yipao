@@ -112,7 +112,7 @@ iOS 16 以上还要打开「设置 → 隐私与安全性 → 开发者模式」
 
    两份输出里的 `com.apple.security.application-groups` 必须都有、且都是同一个字符串，
    `keychain-access-groups` 也必须相同。
-3. **扩展必须一起签。** 只签主 App 会得到一个「App 能开，但小组件库里根本没有壹跑」的结果。
+3. **扩展必须一起签。** 只签主 App 会得到一个「App 能开，但小组件库里根本没有Leap跑」的结果。
 
 如果工具不肯让你控制这些，退回路径 A（Xcode），或者用付费账号 + Development profile
 手动 `codesign` 三层（先签 appex，再签 app，顺序不能反）。
@@ -123,9 +123,9 @@ iOS 16 以上还要打开「设置 → 隐私与安全性 → 开发者模式」
 
 按顺序试，哪一步断了下面对照表查：
 
-1. **桌面小组件**：长按桌面 → 左上角 ＋ → 搜「壹跑」→ 应该能看到「车辆状态 / 车锁 /
+1. **桌面小组件**：长按桌面 → 左上角 ＋ → 搜「Leap跑」→ 应该能看到「车辆状态 / 车锁 /
    上锁车辆 / 解锁车辆」四张卡。加上之后**显示的是真实电量**，不是占位灰块。
-2. **锁屏控件**：锁屏长按 → 自定义 → 添加「壹跑」的车锁按钮，按下去能真的开锁。
+2. **锁屏控件**：锁屏长按 → 自定义 → 添加「Leap跑」的车锁按钮，按下去能真的开锁。
 3. **灵动岛**：App 里按一次锁车/解锁，屏幕顶部应出现一条带车图的岛，进度走完收起。
 4. **控制中心 / 操作按钮**：能加到控制中心并生效。
 
@@ -133,10 +133,10 @@ iOS 16 以上还要打开「设置 → 隐私与安全性 → 开发者模式」
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| 小组件库里搜不到「壹跑」 | 扩展没嵌进 IPA，或扩展没签 | 看 `Payload/LeapControl.app/PlugIns/LeapWidget.appex` 在不在；重签时确保带上扩展 |
+| 小组件库里搜不到「Leap跑」 | 扩展没嵌进 IPA，或扩展没签 | 看 `Payload/LeapControl.app/PlugIns/LeapWidget.appex` 在不在；重签时确保带上扩展 |
 | 卡片能加，但一直是占位数据 | App Group 没注入 / 名字不一致 / 没在后台注册 | 用上面 `codesign -d` 查两份 entitlements；核对 `Info.plist` 的 `YPAppGroup`；确认两个 App ID 都勾了 App Group |
 | 卡片点按钮没反应，App 里正常 | 钥匙串共享组两边不一致 | 两个 target 的 `keychain-access-groups` 必须相同 |
-| 灵动岛从来不出现 | `NSSupportsLiveActivities` 被改掉，或系统设置里关了「实时活动」 | 查主 App `Info.plist`；iPhone「设置 → 壹跑 → 实时活动」打开 |
+| 灵动岛从来不出现 | `NSSupportsLiveActivities` 被改掉，或系统设置里关了「实时活动」 | 查主 App `Info.plist`；iPhone「设置 → Leap跑 → 实时活动」打开 |
 | 装到一半报 `Mismatched Application Identifier Entitlement` | profile 和 Bundle ID 对不上 | 重签时 Bundle ID 与 profile 绑定的那个保持一致 |
 | 装完打不开、闪退 | 证书没信任 / 没开发者模式 / 描述文件过期 | 通用 → VPN 与设备管理里信任；免费账号 7 天过期 |
 
