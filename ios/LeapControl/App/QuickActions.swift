@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 /// 长按桌面图标弹出来的那几个快捷操作。
 ///
@@ -48,6 +49,18 @@ extension Notification.Name {
 /// `UIApplicationDelegate` 上那个同名方法在用了场景的 App 里根本不会被调用。
 @MainActor
 final class LeapAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // 通知代理必须在这里挂：App 在前台时要不要显示横幅，是由它决定的。
+        // 放到 SwiftUI 的 onAppear 里就晚了——冷启动那条通知已经过去了。
+        UNUserNotificationCenter.current().delegate = AlertPresenter.shared
+        // 读一次权限状态，设置页据此显示「通知已关闭」。
+        Task { await AlertCenter.shared.refreshAuthorization() }
+        return true
+    }
+
     func application(
         _ application: UIApplication,
         configurationForConnecting connectingSceneSession: UISceneSession,

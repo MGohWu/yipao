@@ -817,6 +817,9 @@ final class VehicleStore {
             // 充电记录吃同一帧，判定各管各的。两个状态机互相不知道对方存在，但这恰好是对的：
             // 车不可能同时在开和在充，各判各的不会打架，也省得把两套阈值耦在一起。
             ChargeRecorder.shared.observe(fresh, vin: session.selectedVin)
+            // 提醒（未锁车 / 开始充电 / 充电完成）吃同一帧。它只判「该不该提醒」，
+            // 真正的投递在 AlertCenter 里，权限和开关都在那边管。
+            AlertCenter.shared.observe(fresh, place: locationName)
         } catch {
             show(error: error)
         }
@@ -1035,6 +1038,7 @@ final class VehicleStore {
         // 演示态不记行程：那一页有写死的样例，别让「演出来的车」混进车主的真实记录。
         TripRecorder.shared.forgetActiveTrip()
         ChargeRecorder.shared.forgetActiveCharge()
+        AlertCenter.shared.reset()
         let demoState = Self.demoVehicleState
         state = demoState
         lastUpdated = .now
@@ -1053,6 +1057,7 @@ final class VehicleStore {
         // 正在跑的那一趟跟着会话一起丢掉：不写一条半截的行程，也不留着下个账号接着算。
         TripRecorder.shared.forgetActiveTrip()
         ChargeRecorder.shared.forgetActiveCharge()
+        AlertCenter.shared.reset()
         endForegroundVerification()
         cancelBluetoothArmRetry()
         bleController.deactivate(clearBinding: true)

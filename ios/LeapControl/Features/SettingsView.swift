@@ -1,7 +1,9 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(VehicleStore.self) private var store
+    @StateObject private var alerts = AlertCenter.shared
     @State private var showLogoutConfirm = false
     @State private var showCalibration = false
     @State private var presentedDoc: LegalDoc?
@@ -104,6 +106,84 @@ struct SettingsView: View {
                 Text("外观")
             } footer: {
                 Text("车模型资源来自零跑官方，关闭后不再下载，重新打开时自动恢复。")
+            }
+
+            Section {
+                Toggle(isOn: $alerts.unlockedEnabled) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("未锁车提醒")
+                            Text("停好车却忘了锁，超过设定时间提醒一次")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "car.side.lock.open")
+                    }
+                }
+                .tint(LeapStyle.accent)
+
+                if alerts.unlockedEnabled {
+                    Picker(selection: $alerts.unlockedGraceMinutes) {
+                        Text("5 分钟").tag(5)
+                        Text("10 分钟").tag(10)
+                        Text("20 分钟").tag(20)
+                        Text("30 分钟").tag(30)
+                    } label: {
+                        Label("多久之后提醒", systemImage: "timer")
+                    }
+                }
+
+                Toggle(isOn: $alerts.chargeStartedEnabled) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("开始充电")
+                            Text("插上枪、电流真的进来以后提醒")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "bolt.fill")
+                    }
+                }
+                .tint(LeapStyle.accent)
+
+                Toggle(isOn: $alerts.chargeFinishedEnabled) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("充电完成")
+                            Text("车说充完了、或者枪还插着但已经停止充电")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "bolt.badge.checkmark.fill")
+                    }
+                }
+                .tint(LeapStyle.accent)
+
+                if alerts.authorizationDenied {
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("通知权限未开启")
+                                Text("点这里去系统设置打开")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "bell.slash")
+                        }
+                    }
+                }
+            } header: {
+                Text("通知")
+            } footer: {
+                Text("提醒由这台手机发出，所以 App 得还在跑才收得到。锁屏后要收，请把下面的「后台记录」打开；把 App 从后台划掉，就一条都不会来——这是 iOS 的限制，不是漏发。")
             }
 
             // calibrationSection
