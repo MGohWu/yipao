@@ -1127,11 +1127,15 @@ actor LeapClient {
         return true
     }
 
-    private static let shapeDefaults = UserDefaults(suiteName: SnapshotStore.appGroup) ?? .standard
+    /// 每次现取。`UserDefaults` 不是 `Sendable`，放成 static let 会在 Swift 6 下报
+    /// 「not concurrency-safe」——它本来也是线程安全的，只是类型没标。
+    private static func shapeDefaults() -> UserDefaults {
+        UserDefaults(suiteName: SnapshotStore.appGroup) ?? .standard
+    }
 
     /// 上次成功的形态排到最前面。没记住就按默认顺序。
     static func orderedShapes(_ shapes: [CloudHistoryShape], key: String) -> [CloudHistoryShape] {
-        guard let label = shapeDefaults.string(forKey: "cloudHistoryShape." + key),
+        guard let label = Self.shapeDefaults().string(forKey: "cloudHistoryShape." + key),
               let index = shapes.firstIndex(where: { $0.label == label }) else { return shapes }
         var ordered = shapes
         let saved = ordered.remove(at: index)
@@ -1140,7 +1144,7 @@ actor LeapClient {
     }
 
     private static func remember(_ shape: CloudHistoryShape, key: String) {
-        shapeDefaults.set(shape.label, forKey: "cloudHistoryShape." + key)
+        Self.shapeDefaults().set(shape.label, forKey: "cloudHistoryShape." + key)
     }
 
     /// 按一种形态把某段时间的记录翻完。翻页过程中的任何失败都抛出去，交给上层换形态。
