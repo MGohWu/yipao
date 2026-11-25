@@ -210,16 +210,16 @@ struct QuickControlBar: View {
             // 上锁是回到常态，永远不上色。
             QuickControlButton(
                 title: "上锁",
-                systemImage: "car.side.lock.fill",,
+                systemImage: "car.side.lock.fill",
                 accessibilityValue: lockStateDescription,
                 action: store.lockCar
             )
             .leapGlassID(control.rawValue, in: namespace)
         case .unlock:
-            // 车没锁是要提醒的反常，由这一格亮琥珀色来说。读不到锁状态时按锁着画，不上色。
+            // 车没锁是一种「开着」的状态，由这一格亮绿灯来说。读不到锁状态时按锁着画，不亮。
             QuickControlButton(
                 title: "解锁",
-                systemImage: "car.side.lock.open.fill",,
+                systemImage: "car.side.lock.open.fill",
                 highlighted: !locked,
                 accessibilityValue: lockStateDescription,
                 action: store.unlockCar
@@ -229,7 +229,7 @@ struct QuickControlBar: View {
             QuickControlButton(
                 title: "尾门",
                 // 车尾特写的一对：同一段车尾，关着是描边、开着填实并上色。
-                systemImage: trunkOpen ? "car.side.rear.open.crop.fill" : "car.side.rear.open.crop",,
+                systemImage: trunkOpen ? "car.side.rear.open.crop.fill" : "car.side.rear.open.crop",
                 highlighted: trunkOpen,
                 accessibilityValue: store.state?.trunkOpen == nil
                     ? "状态未上报"
@@ -241,7 +241,7 @@ struct QuickControlBar: View {
         case .climate:
             QuickControlButton(
                 title: "空调",
-                systemImage: store.climateOn ? "fan.fill" : "fan",,
+                systemImage: store.climateOn ? "fan.fill" : "fan",
                 highlighted: store.climateOn,
                 accessibilityValue: store.climateOn ? "运行中" : "已关闭",
                 action: { store.applyClimate(on: !store.climateOn) }
@@ -250,7 +250,7 @@ struct QuickControlBar: View {
         case .horn:
             QuickControlButton(
                 title: "鸣笛",
-                systemImage: "speaker.wave.2.fill",,
+                systemImage: "speaker.wave.2.fill",
                 action: store.honk
             )
             .leapGlassID(control.rawValue, in: namespace)
@@ -259,7 +259,7 @@ struct QuickControlBar: View {
             // 就地 toggle（原哨兵卡就是这个交互），不弹层。
             QuickControlButton(
                 title: "哨兵",
-                systemImage: store.sentinelOn ? "shield.fill" : "shield",,
+                systemImage: store.sentinelOn ? "shield.fill" : "shield",
                 highlighted: store.sentinelOn,
                 accessibilityValue: store.sentinelOn ? "已开启" : "已关闭",
                 action: { store.applySentinel(!store.sentinelOn) }
@@ -269,14 +269,14 @@ struct QuickControlBar: View {
             // 车况里没有遮阳帘状态，图标不做两态、不上色；方向在弹层里由用户明确点。
             QuickControlButton(
                 title: "遮阳帘",
-                systemImage: "curtains.closed",,
+                systemImage: "curtains.closed",
                 action: { showSunshade = true }
             )
             .leapGlassID(control.rawValue, in: namespace)
         case .sunroof:
             QuickControlButton(
                 title: "天窗",
-                systemImage: "rectangle.topthird.inset.filled",,
+                systemImage: "rectangle.topthird.inset.filled",
                 action: { showSunroof = true }
             )
             .leapGlassID(control.rawValue, in: namespace)
@@ -284,7 +284,7 @@ struct QuickControlBar: View {
             // 车头特写的一对，和尾门那对同一个语言：关着是描边、开着填实并上色。
             QuickControlButton(
                 title: "前备箱",
-                systemImage: frunkOpen ? "car.side.front.open.crop.fill" : "car.side.front.open.crop",,
+                systemImage: frunkOpen ? "car.side.front.open.crop.fill" : "car.side.front.open.crop",
                 highlighted: frunkOpen,
                 accessibilityValue: store.state?.frontTrunkOpen == nil
                     ? "状态未上报"
