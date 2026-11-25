@@ -979,40 +979,61 @@ actor LeapClient {
     /// 没有一份文档能同时钉死两边，所以让程序自己试：**按顺序试几种形态，哪种回成功就记住哪种**
     /// （存在 UserDefaults 里，下次直接先试它）。失败会写进诊断日志，能看出试到第几种才通。
     struct CloudHistoryShape: Equatable {
-        /// 时间参数用 epoch 秒（true）还是 `yyyy-MM-dd`（false）。
-        var epochSeconds: Bool
+        enum TimeStyle: Equatable {
+            /// epoch 秒。全球客户端用的是这个。
+            case seconds
+            /// epoch 毫秒。国区 `drivingrecord/mileage/energy/detail` 收的就是毫秒。
+            case milliseconds
+            /// `yyyy-MM-dd`。国区充电明细用的是这个。
+            case day
+        }
+
+        var timeStyle: TimeStyle
         /// 分页参数用字符串（true）还是数字（false）。
         var stringPaging: Bool
         var pageSize: Int
-        /// 要不要带 `timeZone`。参考实现里国区那次充电请求带了它，行程接口的 DTO 可能也要求。
+        /// 日期形态下 endTime 给「明天」还是「此刻」。充电那边实测接受明天，
+        /// 行程这边不一定，所以两种都试。
+        var endNextDay: Bool = false
+        /// 要不要带 `timeZone`。参考实现里国区那次充电请求带了它。
         var withTimeZone: Bool = false
 
+        private var timeLabel: String {
+            switch timeStyle {
+            case .seconds: return "秒"
+            case .milliseconds: return "毫秒"
+            case .day: return "日期"
+            }
+        }
+
         var label: String {
-            "\(epochSeconds ? "秒" : "日期")+\(stringPaging ? "字符串" : "数字")分页/\(pageSize)"
+            timeLabel
+                + "+" + (stringPaging ? "字符串" : "数字") + "分页/" + String(pageSize)
+                + (endNextDay ? "+明日" : "")
                 + (withTimeZone ? "+时区" : "")
         }
     }
 
     static let mileageShapes: [CloudHistoryShape] = [
-        // 参考实现（全球客户端）用的就是这一种，先试它。
-        .init(epochSeconds: true, stringPaging: false, pageSize: 20),
-        .init(epochSeconds: true, stringPaging: true, pageSize: 20),
-        // 国区充电接口验证过「日期 + 字符串分页」，行程可能同族。
-        .init(epochSeconds: false, stringPaging: true, pageSize: 20),
-        .init(epochSeconds: false, stringPaging: false, pageSize: 20),
-        .init(epochSeconds: false, stringPaging: true, pageSize: 50),
-        // 最后两种带上 timeZone：国区那次能通的充电请求里就有它，
-        // 行程的 DTO 若是同一个校验器，缺它会被判成「发生错误」。
-        .init(epochSeconds: true, stringPaging: false, pageSize: 20, withTimeZone: true),
-        .init(epochSeconds: false, stringPaging: true, pageSize: 20, withTimeZone: true)
+        // 参考实现的入参，但结束时间会被夹到「此刻」（见 `cloudHistoryRows`）——
+        // mate-cn 自己取里程时也写的是 `min(end, time.time())`，说明这个接口不收未来时间。
+        // 之前 7 种形态全失败，最可能就是因为我们把 endTime 传成了明天。
+        .init(timeStyle: .seconds, stringPaging: false, pageSize: 20),
+        .init(timeStyle: .milliseconds, stringPaging: false, pageSize: 20),
+        .init(timeStyle: .seconds, stringPaging: true, pageSize: 20),
+        .init(timeStyle: .milliseconds, stringPaging: true, pageSize: 20),
+        .init(timeStyle: .day, stringPaging: true, pageSize: 20),
+        .init(timeStyle: .day, stringPaging: true, pageSize: 20, endNextDay: true),
+        .init(timeStyle: .day, stringPaging: false, pageSize: 20),
+        .init(timeStyle: .day, stringPaging: true, pageSize: 50)
     ]
 
     static let chargeShapes: [CloudHistoryShape] = [
-        // 国区实测可用。
-        .init(epochSeconds: false, stringPaging: true, pageSize: 50),
-        .init(epochSeconds: false, stringPaging: true, pageSize: 20),
-        .init(epochSeconds: true, stringPaging: false, pageSize: 20),
-        .init(epochSeconds: false, stringPaging: false, pageSize: 20)
+        // 国区实测可用：日期 + 字符串分页 + 50 + 明天。
+        .init(timeStyle: .day, stringPaging: true, pageSize: 50, endNextDay: true),
+        .init(timeStyle: .day, stringPaging: true, pageSize: 20),
+        .init(timeStyle: .seconds, stringPaging: false, pageSize: 20),
+        .init(timeStyle: .milliseconds, stringPaging: false, pageSize: 20)
     ]
 
     /// 拉零跑云端的**逐趟明细**：官方 App「行程」页那一趟趟记录就是这些数。
@@ -1159,8 +1180,23 @@ actor LeapClient {
         host: String, path: String, vin: String,
         from: Date, to: Date, shape: CloudHistoryShape, maxPages: Int
     ) async throws -> [[String: JSONValue]] {
-        let start = shape.epochSeconds ? String(Int(from.timeIntervalSince1970)) : Self.cloudHistoryDay(from)
-        let end = shape.epochSeconds ? String(Int(to.timeIntervalSince1970)) : Self.cloudHistoryDay(to)
+        // **结束时间不能超过此刻**。参考实现取里程时写的是 `min(end, now)`，
+        // 而我们把 30 天窗口的右端算成了「明天」——服务端对着一个未来时间戳
+        // 直接抛了句笼统的「发生错误」，七种形态全撞在这上面。
+        let upper = min(to, Date())
+        let start: String
+        let end: String
+        switch shape.timeStyle {
+        case .seconds:
+            start = String(Int(from.timeIntervalSince1970))
+            end = String(Int(upper.timeIntervalSince1970))
+        case .milliseconds:
+            start = String(Int(from.timeIntervalSince1970 * 1000))
+            end = String(Int(upper.timeIntervalSince1970 * 1000))
+        case .day:
+            start = Self.cloudHistoryDay(from)
+            end = Self.cloudHistoryDay(shape.endNextDay ? upper.addingTimeInterval(86_400) : upper)
+        }
 
         // 签名只认「最终拼出来的字符串」。数字型分页参数在签名串里也是它的十进制写法，
         // 所以这里用 String(...) 拼，和 body 里是 Int 还是 String 无关。
@@ -1188,9 +1224,14 @@ actor LeapClient {
                 // mate-cn 的实测：code 100 就是「这个区间没有记录」，不是错误。
                 if response.responseCode == "100" { break }
                 let message = response.responseMessage
+                // 服务端只回「发生错误」这种笼统的话，原始响应里往往还有 code/字段线索。
+                // 截断后写进诊断日志（不上传、只在用户导出的那份里）。
+                let raw = String(response.prettyPrinted.prefix(220))
+                    .replacingOccurrences(of: "\n", with: " ")
+                BLEDiagnostics.record("trip", "cloud 原始响应 \(raw)")
                 throw LeapError.server(message.isEmpty
-                    ? "接口返回 \(response.responseCode ?? "?")"
-                    : "\(message)（\(response.responseCode ?? "?")）")
+                    ? "接口返回 \(response.responseCode ?? "?")（区间 \(start)~\(end)）"
+                    : "\(message)（\(response.responseCode ?? "?")，区间 \(start)~\(end)）")
             }
             let data = response["data"]
             let pageRows = data?["list"]?.arrayValue?.compactMap(\.objectValue) ?? []
