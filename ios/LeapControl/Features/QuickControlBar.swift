@@ -88,7 +88,14 @@ struct QuickControlBar: View {
         _controls = State(initialValue: QuickControl.savedOrder)
     }
 
-    private var locked: Bool { store.state?.isLocked ?? true }
+    private var isDriving: Bool { store.state?.isDriving == true }
+
+    /// 「上锁」亮不亮：**驻车且锁着**才亮。行驶中不亮——行驶中门锁随挡位走，
+    /// 远程上锁没有意义，再亮着只会让人以为车停着没动。
+    private var lockLit: Bool { store.state?.isLocked == true && !isDriving }
+    /// 「解锁」亮不亮：车没锁，或者正在行驶（行驶中锁态不表达「锁没锁」，按解锁画，
+    /// 和车上那颗「行驶中」徽章的说法一致）。读不到锁状态时两格都不亮。
+    private var unlockLit: Bool { store.state?.isLocked == false || isDriving }
     /// 两格的无障碍值都报当前状态：按钮名已经是动作，状态得另外说。
     private var lockStateDescription: String {
         switch store.state?.isLocked {
@@ -101,7 +108,6 @@ struct QuickControlBar: View {
     private var trunkOpen: Bool { store.state?.trunkOpen ?? false }
     /// 前备箱同尾门：读不到按关着画。
     private var frunkOpen: Bool { store.state?.frontTrunkOpen ?? false }
-    private var isDriving: Bool { store.state?.isDriving == true }
 
     /// 车不支持的控制整格隐藏（不是置灰：摆一个永远点不了的按钮等于承诺了做不到的事）。
     private func isSupported(_ control: QuickControl) -> Bool {
@@ -207,23 +213,22 @@ struct QuickControlBar: View {
     private func controlButton(_ control: QuickControl) -> some View {
         switch control {
         case .lock:
-            // 上锁这一格代表「现在的状态是锁着的」，所以车锁着时它亮。
-            // 读不到锁状态时**不亮**（`== true` 而不是 `?? true`）：猜一个「已锁」亮起来，
+            // 驻车且锁着才亮（见 `lockLit`）。读不到锁状态时不亮：猜一个「已锁」亮起来，
             // 等于向车主保证了一件我们并不知道的事。
             QuickControlButton(
                 title: "上锁",
                 systemImage: "car.side.lock.fill",
-                highlighted: store.state?.isLocked == true,
+                highlighted: lockLit,
                 accessibilityValue: lockStateDescription,
                 action: store.lockCar
             )
             .leapGlassID(control.rawValue, in: namespace)
         case .unlock:
-            // 和「上锁」成对：车没锁时这一格亮，锁着时不亮。读不到状态时两格都不亮。
+            // 和「上锁」成对：车没锁、或者行驶中，这一格亮。读不到状态时两格都不亮。
             QuickControlButton(
                 title: "解锁",
                 systemImage: "car.side.lock.open.fill",
-                highlighted: !locked,
+                highlighted: unlockLit,
                 accessibilityValue: lockStateDescription,
                 action: store.unlockCar
             )
