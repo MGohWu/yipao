@@ -63,7 +63,7 @@ struct MainTabView: View {
                 }
             }
         }
-        .tint(LeapStyle.accent)
+        .tint(LeapStyle.ink)
         .onChange(of: store.pendingDeepLink, initial: true) { _, link in
             guard let link else { return }
             if link == "settings" {

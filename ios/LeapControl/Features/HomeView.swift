@@ -100,7 +100,7 @@ struct HomeView: View {
                 // 底部只保留系统 Tab Bar，小屏或大字号则自然滚动查看其余车况。
                 GeometryReader { proxy in
                     ScrollView {
-                        VStack(spacing: 12) {
+                        VStack(spacing: 14) {
                             dashboardHeader
                             VehicleHero(size: heroSize, badges: statusBadges)
                             QuickControlBar(
@@ -865,9 +865,12 @@ private struct VehicleHero<Badge: View>: View {
                 // 它就是最终画面，而不是留一块空白。3D 出来后盖在它上面。
                 staticVehicle.opacity(is3DReady ? 0 : 1)
             }
-            // 展台挂在背景上，不参与布局：车厢后面一圈打光、脚下一点落影。
-            // 官方 App 的车不是浮在白底上的，是「停在展台上」——差别就在这两层。
-            .background { stage }
+            // 车模坐在一张自己的「面」上：底色 + 环境光 + 车下柔光 + 落影。
+            // 挂 background 不参与布局，卡片多高仍由车图层决定。
+            .background { heroSurface }
+            .clipShape(.rect(cornerRadius: 34, style: .continuous))
+            .overlay(alignment: .bottom) { heroFade }
+            .overlay { heroEdge }
             // 纯装饰。锁车状态由下面那排徽章负责播报，这里再念一遍「汽车」是噪音。
             .accessibilityHidden(true)
             // 3D 资源被撤走或换成另一台车的目录时必须把就绪/失败位清掉：
@@ -882,47 +885,104 @@ private struct VehicleHero<Badge: View>: View {
             badges
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 6)
-        .padding(.bottom, 4)
+        .padding(.top, 2)
+        .padding(.bottom, 2)
     }
 
-    /// 展台：车后一团柔光 + 一圈很淡的光环 + 脚下落影。
+    /// 车模所在的卡片表面。
     ///
-    /// 用 `GeometryReader` 是因为这几层都要按 hero 的实际宽高取相对尺寸——
-    /// 车图有 1125×525 也有 1125×1200 的，写死像素在另一种比例上就错位了。
-    /// 挂在 `.background` 里，所以再贪心也不会把 hero 撑高。
-    private var stage: some View {
+    /// 参考 `stephenwang1011/leapauto` 的做法：车不是浮在页面底色上，而是停在一块**有材质的面**上——
+    /// 一层浅渐变 + 左上角极淡的环境光 + 车下一团白色柔光 + 一片模糊落影。
+    /// 有了这块面，车模和页面之间就有了「这是展台」的交代，不会像贴纸一样突兀。
+    ///
+    /// 挂在 `.background` 里，不参与布局：卡片多高由车图层决定，2D/3D 切换时不会跳。
+    private var heroSurface: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = proxy.size.height
             ZStack {
-                // 打光：中心一团主色光，往外化开。深色下靠底色本来就暗，给得少一点。
-                RadialGradient(
-                    colors: [LeapStyle.accent.opacity(colorScheme == .dark ? 0.22 : 0.15), .clear],
-                    center: .center,
-                    startRadius: 4,
-                    endRadius: width * 0.62
+                LinearGradient(
+                    colors: colorScheme == .dark
+                        ? [Color(red: 0.17, green: 0.18, blue: 0.20),
+                           Color(red: 0.13, green: 0.14, blue: 0.16),
+                           Color(red: 0.09, green: 0.10, blue: 0.11)]
+                        : [Color.white,
+                           Color(red: 0.975, green: 0.978, blue: 0.985),
+                           Color.white.opacity(0.92)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
 
-                // 光环：一圈几乎看不见的圆，把「展台」的范围暗示出来。
-                Circle()
-                    .stroke(LeapStyle.primaryLabel.opacity(colorScheme == .dark ? 0.10 : 0.06),
-                            lineWidth: 1)
-                    .frame(width: width * 0.78)
-                    .position(x: width / 2, y: height * 0.52)
+                // 环境光：跟着车况走，但只给一点点——它是氛围，不是主角。
+                RadialGradient(
+                    colors: [ambientColor.opacity(colorScheme == .dark ? 0.16 : 0.13), .clear],
+                    center: UnitPoint(x: 0.16, y: 0.12),
+                    startRadius: 4,
+                    endRadius: width * 0.6
+                )
 
-                // 落影：压在车轮下方。偏一点也没关系——它是模糊的，读起来是环境影而不是线。
+                // 车下柔光：leapauto 那张首卡里最提气的一层，白光从车底往外漫。
+                RadialGradient(
+                    colors: [Color.white.opacity(colorScheme == .dark ? 0.10 : 0.75), .clear],
+                    center: UnitPoint(x: 0.5, y: 0.78),
+                    startRadius: 6,
+                    endRadius: width * 0.46
+                )
+
+                // 落影：压在车轮下方。模糊过，所以偏一点也不像错位。
                 Ellipse()
-                    .fill(LeapStyle.primaryLabel.opacity(colorScheme == .dark ? 0.34 : 0.16))
-                    .frame(width: width * 0.52, height: max(14, height * 0.05))
-                    .blur(radius: max(8, height * 0.05))
+                    .fill(colorScheme == .dark ? Color.black.opacity(0.42) : Color.black.opacity(0.10))
+                    .frame(width: width * 0.50, height: max(12, height * 0.045))
+                    .blur(radius: max(9, height * 0.045))
                     .position(x: width / 2, y: height * 0.80)
             }
         }
         .allowsHitTesting(false)
     }
 
-    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。
+    /// 环境光的颜色：在充电给绿、制热给暖、其余给冷灰。
+    private var ambientColor: Color {
+        if store.state?.isCharging == true { return LeapStyle.accent }
+        if store.climateOn { return store.climateMode == .hot ? LeapStyle.warm : LeapStyle.cool }
+        return LeapStyle.cool
+    }
+
+    /// 卡片底部向外渐隐到页面色，去掉那道生硬的横切边。
+    private var heroFade: some View {
+        LinearGradient(
+            colors: [.clear,
+                     pageColor.opacity(colorScheme == .dark ? 0.55 : 0.75),
+                     pageColor],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 96)
+        .allowsHitTesting(false)
+    }
+
+    /// 页面底色（近似 `LeapBackground` 的落点），只用来做渐隐。
+    private var pageColor: Color {
+        colorScheme == .dark
+            ? Color(red: 0.05, green: 0.055, blue: 0.06)
+            : Color(red: 0.945, green: 0.952, blue: 0.965)
+    }
+
+    /// 卡片边缘：顶部一道高光，往下收掉。比整圈描边更像玻璃。
+    private var heroEdge: some View {
+        RoundedRectangle(cornerRadius: 34, style: .continuous)
+            .strokeBorder(
+                LinearGradient(
+                    colors: [Color.white.opacity(colorScheme == .dark ? 0.18 : 0.85),
+                             Color.white.opacity(0.02)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 1
+            )
+            .allowsHitTesting(false)
+    }
+
+    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。
     @ViewBuilder
     private var staticVehicle: some View {
         if let composition = store.carComposition {

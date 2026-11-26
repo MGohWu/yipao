@@ -3,9 +3,12 @@ import UIKit
 
 /// 全局视觉语言。
 ///
-/// 这一版整体往「深海 + 极光」走：底色是深的靛蓝，顶部一团随车况变化的极光，
-/// 卡片浮在上面靠的是玻璃折射而不是描边。配色从图标来——墨蓝底 + 薄荷绿主色，
-/// 暖橙只留给「要注意」和「在充电」这类状态。
+/// 这一版改成**中性画布 + 状态色**：界面本身只有灰阶，颜色只用来表达车在干什么
+/// （在充电 = 绿、异常 = 红、加热 = 橙）。这和 `stephenwang1011/leapauto` 的做法一致——
+/// 玻璃是承载车辆状态的容器，花花绿绿的背景会把车本身盖过去。
+///
+/// 画布是接近中性的暖灰（浅）/ 曜石黑（深），带一层很淡的光；卡片靠折射和边缘高光立起来，
+/// 不再靠彩色光晕。
 enum LeapStyle {
     static let cardRadius: CGFloat = 28
     static let tileRadius: CGFloat = 24
@@ -18,29 +21,42 @@ enum LeapStyle {
     // 注意：这些色同时被拿去画背景的极光。极光是大面积色块，用不了压暗的版本，
     // 所以 `LeapBackground` 会按明暗各自混色，见那边的说明。
 
-    /// 主色：薄荷绿。锁、充电、选中的 Tab 都用它。
+    /// 强调色：能量绿。**只表示「有电在流动」**——充电中、刚充满、电量健康。
+    /// 浅色版压得比较深，因为它还要当文字用（#00C853 铺在白底上只有 2.2:1，读不清）。
     static let accent = adaptive(
-        light: Color(red: 0.02, green: 0.46, blue: 0.36),
-        dark: Color(red: 0.38, green: 0.92, blue: 0.74)
+        light: Color(red: 0.0, green: 0.48, blue: 0.24),
+        dark: Color(red: 0.28, green: 0.86, blue: 0.53)
     )
-    /// 冷色：天青。位置、导航、次要图表。
+
+    /// 界面主色：墨。选中态、主按钮、Tab 用它。中性色不会跟状态色抢注意力。
+    static let ink = adaptive(
+        light: Color(red: 0.10, green: 0.11, blue: 0.12),
+        dark: Color(red: 0.92, green: 0.93, blue: 0.94)
+    )
+
+    /// 警示：告警红。胎压异常、门没关、没锁车。
+    static let alert = adaptive(
+        light: Color(red: 0.85, green: 0.18, blue: 0.13),
+        dark: Color(red: 1.0, green: 0.54, blue: 0.50)
+    )
+
+    /// 冷色：灰蓝。位置、导航这类中性信息。
     static let cool = adaptive(
-        light: Color(red: 0.10, green: 0.33, blue: 0.72),
-        dark: Color(red: 0.44, green: 0.72, blue: 1.0)
+        light: Color(red: 0.26, green: 0.33, blue: 0.42),
+        dark: Color(red: 0.62, green: 0.70, blue: 0.80)
     )
-    /// 暖色：琥珀。加热、充电中、快充。
+    /// 暖色：琥珀。座椅/方向盘加热。
     static let warm = adaptive(
-        light: Color(red: 0.74, green: 0.40, blue: 0.02),
-        dark: Color(red: 1.0, green: 0.72, blue: 0.38)
+        light: Color(red: 0.65, green: 0.33, blue: 0.02),
+        dark: Color(red: 1.0, green: 0.71, blue: 0.30)
     )
-    /// 提醒：补记、失败、没关好的门。
+    /// 提醒：和告警同色系，但轻一档——补记、暂不可用这类「知道就好」的状态。
     static let caution = adaptive(
         light: Color(red: 0.62, green: 0.36, blue: 0.0),
         dark: Color(red: 1.0, green: 0.82, blue: 0.54)
     )
 
-    /// 除霜专用。不能用 `.primary`：深色模式下它是纯白，玻璃按钮被白色一染就成了亮底，
-    /// 排在快速降温、快速制热旁边活像已经选中。
+    /// 除霜专用。不能用 `.primary`：深色模式下它是纯白，玻璃按钮被白色一染就成了亮底。
     static let frost = adaptive(
         light: Color(red: 0.02, green: 0.42, blue: 0.48),
         dark: Color(red: 0.36, green: 0.86, blue: 0.90)
@@ -90,10 +106,9 @@ enum LeapStyle {
 
 /// 车辆主视觉背景：充电时偏薄荷、空调制热时偏暖，其余偏靛蓝。
 ///
-/// 上一版是叠几个椭圆光晕；这一版换成 `MeshGradient`（iOS 18 起），
-/// 九宫格的顶点颜色互相插值，出来的是一整片有走向的极光，而不是三个圆。
-/// 下面再压一层暗角，让四周收进去——「大气」靠的就是这个收边，
-/// 光晕铺满整屏反而平。
+/// 上一版是叠几个椭圆光晕，再往前是 MeshGradient 极光；这一版全部收掉，
+/// 只留「中性底色 + 一片顶光 + 一圈暗角」。理由和配色一致：底色越安静，
+/// 车模和卡片越立得住。
 struct LeapBackground: View {
     var tint: Color
     @Environment(\.colorScheme) private var colorScheme
@@ -109,101 +124,61 @@ struct LeapBackground: View {
         .animation(.smooth(duration: 1.1), value: tint)
     }
 
-    // MARK: - 深色：深海 + 极光
+    // MARK: - 深色：曜石黑 + 一片很淡的顶光
 
     private var darkLayers: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.10, blue: 0.17),
-                    Color(red: 0.02, green: 0.05, blue: 0.10),
-                    .black
+                    Color(red: 0.09, green: 0.10, blue: 0.11),
+                    Color(red: 0.05, green: 0.055, blue: 0.06),
+                    Color(red: 0.025, green: 0.03, blue: 0.035)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
 
-            MeshGradient(
-                width: 3,
-                height: 3,
-                points: [
-                    [0, 0], [0.5, 0], [1, 0],
-                    [0, 0.5], [0.55, 0.42], [1, 0.5],
-                    [0, 1], [0.5, 1], [1, 1]
-                ],
-                colors: [
-                    tint.mix(with: Color(red: 0.02, green: 0.10, blue: 0.18), by: 0.55),
-                    tint.mix(with: .black, by: 0.55),
-                    LeapStyle.cool.mix(with: .black, by: 0.50),
-                    Color(red: 0.03, green: 0.08, blue: 0.14),
-                    Color(red: 0.06, green: 0.15, blue: 0.22),
-                    LeapStyle.cool.mix(with: .black, by: 0.72),
-                    .black,
-                    Color(red: 0.02, green: 0.05, blue: 0.09),
-                    LeapStyle.cool.mix(with: .black, by: 0.84)
-                ]
+            // 只留一片中性顶光。彩色极光会把车模盖住——车才是这一页的主角。
+            RadialGradient(
+                colors: [Color.white.opacity(0.06), .clear],
+                center: .init(x: 0.5, y: 0.02),
+                startRadius: 10,
+                endRadius: 420
             )
-            .opacity(0.92)
         }
     }
 
-    // MARK: - 浅色：珍珠 + 淡蓝
+    // MARK: - 浅色：暖浅灰 + 顶部反射
 
     private var lightLayers: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.97, green: 0.98, blue: 1.0),
-                    Color(red: 0.92, green: 0.95, blue: 0.99),
-                    Color(red: 0.84, green: 0.89, blue: 0.96)
+                    Color(red: 0.975, green: 0.978, blue: 0.985),
+                    Color(red: 0.945, green: 0.952, blue: 0.965),
+                    Color(red: 0.905, green: 0.918, blue: 0.938)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
 
-            MeshGradient(
-                width: 3,
-                height: 3,
-                points: [
-                    [0, 0], [0.5, 0], [1, 0],
-                    [0, 0.5], [0.55, 0.42], [1, 0.5],
-                    [0, 1], [0.5, 1], [1, 1]
-                ],
-                colors: [
-                    tint.mix(with: .white, by: 0.45),
-                    tint.mix(with: .white, by: 0.72),
-                    LeapStyle.cool.mix(with: .white, by: 0.66),
-                    Color(red: 0.96, green: 0.975, blue: 0.995),
-                    Color(red: 0.94, green: 0.965, blue: 0.99),
-                    LeapStyle.cool.mix(with: .white, by: 0.76),
-                    Color(red: 0.86, green: 0.90, blue: 0.96),
-                    Color(red: 0.91, green: 0.94, blue: 0.985),
-                    LeapStyle.cool.mix(with: .white, by: 0.62)
-                ]
+            // 顶部一层极淡的白，模拟屏幕边缘的反射，避免整片灰到底。
+            RadialGradient(
+                colors: [.white.opacity(0.9), .clear],
+                center: .init(x: 0.5, y: -0.05),
+                startRadius: 10,
+                endRadius: 480
             )
-            .opacity(0.95)
-
-            // 顶部一道细高光，像屏幕边缘的反光。浅色下没有它，整片会显得平。
-            LinearGradient(
-                colors: [.white.opacity(0.55), .clear],
-                startPoint: .top,
-                endPoint: .init(x: 0.5, y: 0.28)
-            )
-            .blendMode(.plusLighter)
         }
     }
 
-    /// 暗角。四周压暗、中间留亮，视觉重心自然收到车辆和卡片上。
+    /// 暗角。四周压一点点，视觉重心收到中间。
     private var vignette: some View {
         RadialGradient(
-            colors: [
-                .clear,
-                .clear,
-                Color.black.opacity(isDark ? 0.55 : 0.16)
-            ],
+            colors: [.clear, .clear, Color.black.opacity(isDark ? 0.40 : 0.08)],
             center: .init(x: 0.5, y: 0.38),
-            startRadius: 60,
-            endRadius: 620
+            startRadius: 80,
+            endRadius: 640
         )
     }
 }

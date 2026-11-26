@@ -144,7 +144,7 @@ struct VehicleLocationView: View {
                         .padding(.vertical, 14)
                 }
                 .leapGlassButton(prominent: true)
-                .tint(LeapStyle.accent)
+                .tint(LeapStyle.ink)
                 .disabled(coordinate == nil)
                 // iOS 26 起确认弹窗会锚定在修饰符附着的视图上弹出。
                 // 挂在最外层 ZStack 上它会锚到整屏，必须挂在触发它的按钮上。
