@@ -10,8 +10,8 @@ settings:
   base:
     # 这两项会生成 CFBundleShortVersionString / CFBundleVersion。
     # 缺了它们，App 扩展安装时会报 "Invalid placeholder attributes"。
-    MARKETING_VERSION: "3.7"
-    CURRENT_PROJECT_VERSION: "1795665604"
+    MARKETING_VERSION: "3.8"
+    CURRENT_PROJECT_VERSION: "1795672371"
     SWIFT_VERSION: "6.0"
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     # 填你自己的 Apple Team ID（10 位），见 README「签名」。

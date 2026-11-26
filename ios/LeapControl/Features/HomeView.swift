@@ -1064,8 +1064,11 @@ private struct VehicleHero<Badge: View>: View {
                 // 它就是最终画面，而不是留一块空白。3D 出来后盖在它上面。
                 staticVehicle.opacity(is3DReady ? 0 : 1)
             }
-            // 车直接站在画布上：不再有卡片、没有描边，只有身后一束光和脚下一片影。
-            // 特斯拉那套的观感就是这么来的——四周是纯黑，车是唯一亮的东西。
+            // 车直接站在画布上：没有卡片、没有描边。
+            // 但**光有背景还不够**——3D 画布和 2D 图层都是矩形，边缘被硬切，
+            // 叠在纯黑上就是一张「贴上去的图」。所以上下各羽化一段，让矩形边界消失，
+            // 车底部化进落影里，看起来像站在那儿，而不是浮在那儿。
+            .mask(heroFeather)
             .background { heroGlow }
             // 纯装饰。锁车状态由下面那排徽章负责播报，这里再念一遍「汽车」是噪音。
             .accessibilityHidden(true)
@@ -1085,24 +1088,81 @@ private struct VehicleHero<Badge: View>: View {
         .padding(.bottom, 2)
     }
 
-    /// 车身后的一束光 + 脚下一片模糊落影。挂在 `.background` 里，不参与布局。
+    /// 车模的上下羽化。
+    ///
+    /// 顶部 6%：3D 画布被放大 1.16 倍之后，上沿是被硬切掉的，不羽化就会露出一条直线。
+    /// 底部从 80% 开始化开：3D 放大 1.16 之后车轮落在 0.75~0.85 这一带，
+    /// 羽化起点再往上就会把车轮一起吃掉，车像被切了一刀。
+    /// 2D 图层（1125×525）车只占中间一条，上下本来就是透明，这层对它是无害的。
+    private var heroFeather: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .white, location: 0.06),
+                .init(color: .white, location: 0.80),
+                .init(color: .clear, location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// 车所在的那一小块「地面」：环境光 + 地面光池 + 地平线 + 双层落影。
+    ///
+    /// 特斯拉那套观感的来源不是「车很大」，而是**车下面有一块被照亮的地**。
+    /// 正圆的 RadialGradient 做不到这一点——它在各方向上衰减一样，看起来像车后面挂了个灯泡。
+    /// 这里全部用压扁的椭圆：光贴着地面摊开，才读得出「地面」。
+    ///
+    /// 挂在 `.background` 里，不参与布局。
     private var heroGlow: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = proxy.size.height
+            let groundY = height * 0.74
             ZStack {
-                RadialGradient(
-                    colors: [ambientColor.opacity(colorScheme == .dark ? 0.13 : 0.10), .clear],
-                    center: UnitPoint(x: 0.5, y: 0.46),
-                    startRadius: 8,
-                    endRadius: width * 0.66
-                )
-
+                // 环境光：车后方一团很淡的色，只负责把车和底色分开。
+                //
+                // 这里**不用 RadialGradient**：它的 startRadius/endRadius 是点值，不是归一化的，
+                // 塞进压扁的 Ellipse 里很难同时对上两个轴。纯色椭圆 + 大半径模糊就是光，
+                // 而且模糊半径可控，不会因为车型换了比例就走样。
                 Ellipse()
-                    .fill(colorScheme == .dark ? Color.white.opacity(0.07) : Color.black.opacity(0.09))
-                    .frame(width: width * 0.50, height: max(12, height * 0.045))
-                    .blur(radius: max(9, height * 0.045))
-                    .position(x: width / 2, y: height * 0.82)
+                    .fill(ambientColor.opacity(colorScheme == .dark ? 0.17 : 0.12))
+                    .frame(width: width * 0.86, height: height * 0.60)
+                    .blur(radius: 42)
+                    .position(x: width / 2, y: height * 0.46)
+
+                // 地面光池：贴着地的一片亮。车「停」在这上面。
+                Ellipse()
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.14 : 0.60))
+                    .frame(width: width * 0.72, height: height * 0.17)
+                    .blur(radius: 24)
+                    .position(x: width / 2, y: groundY)
+
+                // 地平线：极淡的一道横光，把「地面」这件事点出来。两端化开，不是一条线。
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [.clear, ambientColor.opacity(colorScheme == .dark ? 0.22 : 0.16), .clear],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                    )
+                    .frame(width: width * 0.72, height: 1)
+                    .blur(radius: 2)
+                    .position(x: width / 2, y: groundY + height * 0.02)
+
+                // 远影：宽而淡，往四周散开。
+                Ellipse()
+                    .fill(Color.black.opacity(colorScheme == .dark ? 0.38 : 0.10))
+                    .frame(width: width * 0.62, height: max(16, height * 0.06))
+                    .blur(radius: max(14, height * 0.06))
+                    .position(x: width / 2, y: groundY + height * 0.05)
+
+                // 近影：窄而实，贴在车轮正下方。有这一层，车才不会像飘在光上。
+                Ellipse()
+                    .fill(Color.black.opacity(colorScheme == .dark ? 0.5 : 0.16))
+                    .frame(width: width * 0.40, height: max(8, height * 0.028))
+                    .blur(radius: max(5, height * 0.022))
+                    .position(x: width / 2, y: groundY + height * 0.035)
             }
         }
         .allowsHitTesting(false)
@@ -1115,7 +1175,7 @@ private struct VehicleHero<Badge: View>: View {
         return LeapStyle.cool
     }
 
-    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。
+    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。
     @ViewBuilder
     private var staticVehicle: some View {
         if let composition = store.carComposition {
