@@ -320,7 +320,9 @@ final class BLEVehicleController: NSObject {
             delegate: self,
             queue: .main,
             options: [
-                CBCentralManagerOptionShowPowerAlertKey: true,
+                // 蓝牙关着时不弹系统提示「想使用蓝牙进行新连接」——控车本来就有云端兜底，
+                // 蓝牙这条路走不通会自动改走网络，没必要每次都打断用户。
+                CBCentralManagerOptionShowPowerAlertKey: false,
                 CBCentralManagerOptionRestoreIdentifierKey: Self.restorationIdentifier
             ]
         )
