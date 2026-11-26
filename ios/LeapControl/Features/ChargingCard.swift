@@ -59,7 +59,7 @@ struct ChargingCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LeapStyle.surface, in: .rect(cornerRadius: 16, style: .continuous))
+        .background(LeapStyle.surface, in: .rect(cornerRadius: 18, style: .continuous))
     }
 
     private var header: some View {

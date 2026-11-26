@@ -1,5 +1,6 @@
 import ActivityKit
 import SwiftUI
+import UIKit
 import WidgetKit
 
 /// 控车过程那条灵动岛 / 锁屏横幅。
@@ -18,8 +19,10 @@ struct ControlActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: ControlActivityAttributes.self) { context in
             LockScreenView(face: ActivityFace(context))
-                .activityBackgroundTint(.black.opacity(0.45))
-                .activitySystemActionForegroundColor(.white)
+                // 背景交给系统：深浅两套锁屏它自己会给合适的半透明材质。
+                // 以前固定压一层 45% 黑，浅色锁屏上像贴了块炭，白字也没了层次。
+                .activityBackgroundTint(Color(uiColor: .secondarySystemBackground).opacity(0.55))
+                .activitySystemActionForegroundColor(Color(uiColor: .label))
         } dynamicIsland: { context in
             let face = ActivityFace(context)
             return DynamicIsland {
@@ -204,7 +207,7 @@ private struct LockScreenDetail: View {
             // 锁屏这条上没有单独放车名的地方，所以没别的话说时由它顶上。
             Text(face.subtitle ?? face.vehicleName)
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Color(uiColor: .secondaryLabel))
                 .lineLimit(1)
         }
     }
@@ -215,6 +218,8 @@ private struct CarThumb: View {
     var face: ActivityFace
     var width: CGFloat
     var height: CGFloat
+    /// 没有车图时的剪影颜色。灵动岛里永远是黑底，用白；锁屏跟着系统明暗走。
+    var glyphColor: Color = .white
 
     var body: some View {
         Group {
@@ -226,7 +231,7 @@ private struct CarThumb: View {
             } else {
                 Image(systemName: "car.side.fill")
                     .font(.system(size: height * 0.7, weight: .thin))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(glyphColor.opacity(0.55))
             }
         }
         // 宽高都框死。只给高度的话宽度由车图自己的比例说了算，
@@ -285,12 +290,17 @@ private struct LockScreenView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            CarThumb(face: face, width: 76, height: 40)
+            CarThumb(
+                face: face,
+                width: 76,
+                height: 40,
+                glyphColor: Color(uiColor: .secondaryLabel)
+            )
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(face.title)
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color(uiColor: .label))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 LockScreenDetail(face: face)

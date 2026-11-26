@@ -144,8 +144,8 @@ struct ServicesView: View {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 38, height: 38)
-                    .background(tint.opacity(0.12), in: .rect(cornerRadius: 12))
+                    .frame(width: 40, height: 40)
+                    .background(tint.opacity(0.12), in: .rect(cornerRadius: 14, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.subheadline.weight(.semibold))
                     Text(subtitle)

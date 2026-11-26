@@ -527,6 +527,13 @@ struct HomeView: View {
                     systemImage: locked ? "car.side.lock.fill" : "car.side.lock.open.fill",
                     tint: locked ? .secondary : LeapStyle.caution
                 )
+                // 「停着没动」本身就是一条信息，官方首页也是锁车、驻车两颗并排。
+                // 行驶中已经由上面那颗说了，这里不重复。
+                StatusPill(
+                    text: "已驻车",
+                    systemImage: "parkingsign",
+                    tint: LeapStyle.cool
+                )
             }
             if state?.trunkOpen == true {
                 StatusPill(
