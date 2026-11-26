@@ -3,7 +3,7 @@ import SwiftUI
 /// 首页的充电模块：插枪在充时出现，回答三个问题——**还要多久、多大功率、充到哪儿了**。
 ///
 /// 参照原厂控车 App 的充电卡：上面一行状态与功率，中间一个大号的「还剩多久」，
-/// 下面一条进度（当前电量 → 目标电量），最后一行已充度数与时长的流水。
+/// 下面一条进度（当前电量 → 目标电量），最后一行是已充度数的流水。
 ///
 /// 剩余时间的来源有优先级：
 /// 1. 车自己报的剩余分钟（`chargeRemainMinutes`）——最准，直接信；
@@ -13,7 +13,10 @@ import SwiftUI
 ///    **不编一个时间**——一个不准的倒计时比没有更让人焦躁。
 struct ChargingCard: View {
     var state: VehicleState
-    /// 正在充的这条记录：用来算「已充多少度、已经充了多久」。
+    /// 正在充的这条记录：用来算「已充多少度」。**不给已充时长**——官方没有
+    /// 「充电开始时间/已持续时长」的接口（车况只报状态、剩余时间、功率；云端明细
+    /// 只覆盖已结算的场次），本机从「第一次观察到在充电」起算，App 重开就归零，
+    /// 充了一夜显示「已充 1 分钟」纯粹是误导，宁可不展示。
     var active: ChargeRecord?
     var kwhPerPercent: Double?
 
@@ -147,10 +150,6 @@ struct ChargingCard: View {
             if let energy = active?.energyKwh, energy > 0.05 {
                 Text("·").foregroundStyle(.tertiary)
                 Text(String(format: "已充 %.1f kWh", energy))
-            }
-            if let active {
-                Text("·").foregroundStyle(.tertiary)
-                Text("已充 \(durationText(Int(active.duration / 60)))")
             }
             Spacer(minLength: 0)
         }
