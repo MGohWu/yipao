@@ -168,7 +168,11 @@ struct RecordsHero: View {
                 }
                 .padding(.top, -6)
 
-                barChart
+                // 只有一根柱子的图不是图：今日档就一根孤零零的大色块，
+                // 撑在数字和分隔线中间既不表达什么也点不了。柱子不足两根就不画图表区。
+                if bars.count > 1 {
+                    barChart
+                }
 
                 Rectangle()
                     .fill(LeapStyle.hairline)
