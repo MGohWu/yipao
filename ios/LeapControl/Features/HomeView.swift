@@ -59,6 +59,8 @@ struct HomeView: View {
     @Environment(VehicleStore.self) private var store
     /// 充电模块要显示「已充多少度、多久」，这两项只有 ChargeRecorder 有。
     @StateObject private var chargeRecorder = ChargeRecorder.shared
+    /// 首页那张「今日行程」卡片要今天的趟数和里程。
+    @StateObject private var tripRecorder = TripRecorder.shared
     @State private var showWindows = false
     @State private var showTrunk = false
     @State private var showSunshade = false
@@ -112,9 +114,10 @@ struct HomeView: View {
                         VStack(spacing: 14) {
                             dashboardHeader
                             VehicleHero(size: heroSize, badges: statusBadges)
+                            rangeBlock
+
                             if isChargingNow, let liveState = state {
-                                // 原厂 App 把充电信息摆在首屏靠上的位置：插着枪时
-                                // 「还要多久」比什么都重要，所以放在控制条之前。
+                                // 充电时这张卡提到控制条上方：插着枪，「还要多久」比什么都重要。
                                 ChargingCard(
                                     state: liveState,
                                     active: chargeRecorder.active,
@@ -122,15 +125,20 @@ struct HomeView: View {
                                 )
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                             }
+
                             QuickControlBar(
                                 showTrunk: $showTrunk,
                                 showSunshade: $showSunshade,
                                 showSunroof: $showSunroof,
                                 showFrunk: $showFrunk
                             )
-                            summaryRow
-                            statusStrip
-                            locationCard
+
+                            // 充电时不摆这四张：充电卡已经把电量、进度、时长都说了，
+                            // 再摆一排状态卡只会把「在充电」这件事稀释掉。
+                            if !isChargingNow {
+                                statusGrid
+                            }
+
                             privacyNote
                         }
                         .padding(.horizontal, 16)
@@ -236,6 +244,157 @@ struct HomeView: View {
     private var headerTopInset: CGFloat {
         let t = min(1, max(0, (Self.screenHeight - 812) / (945 - 812)))
         return 42 - t * (42 - 10)   // 小屏 42(≈原导航栏)→ 大屏 10(留呼吸)
+    }
+
+    // MARK: - 续航与状态卡
+
+    /// 续航：全页唯一的大数字，下面一条电池条。点进去是充电页。
+    private var rangeBlock: some View {
+        NavigationLink(value: HomeRoute.charge) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(rangeValueText)
+                        .font(.system(size: 36, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .tracking(-1.4)
+                        .foregroundStyle(LeapStyle.ink)
+                        .contentTransition(.numericText())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    if state?.hasFuel != true {
+                        Text("km")
+                            .font(.system(size: 12))
+                            .foregroundStyle(LeapStyle.secondaryLabel)
+                    }
+                    Spacer(minLength: 8)
+                    if let soc = state?.soc {
+                        Text("\(soc)%")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(LeapStyle.ink)
+                    }
+                    if let temperature = displayedTemp {
+                        Text("· \(Int(temperature.rounded()))°C")
+                            .font(.system(size: 12))
+                            .foregroundStyle(LeapStyle.secondaryLabel)
+                    }
+                }
+                BatteryBar(
+                    soc: state?.soc ?? 0,
+                    limit: state?.chargeLimit,
+                    charging: state?.isCharging ?? false,
+                    height: 4
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 2)
+    }
+
+    private var rangeValueText: String {
+        guard let state else { return "--" }
+        if state.hasFuel, let energy = state.energyRange { return "\(energy)" }
+        return state.expectedMileage.map(String.init) ?? "--"
+    }
+
+    /// 2×2 状态卡。每一张都能点：车门车窗、胎压两个开弹窗，行程和位置进下一级页面。
+    private var statusGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+            spacing: 10
+        ) {
+            if store.windowsControllable {
+                Button { showWindows = true } label: {
+                    statusCard(
+                        icon: "car.top.door.front.left.and.front.right.open",
+                        title: "车门车窗",
+                        value: doorWindowSummary,
+                        alert: state?.anyDoorOpen == true
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                statusCard(
+                    icon: "car.top.door.front.left.and.front.right.open",
+                    title: "车门车窗",
+                    value: doorWindowSummary,
+                    alert: state?.anyDoorOpen == true
+                )
+            }
+
+            Button { showTires = true } label: {
+                statusCard(
+                    icon: "gauge.with.dots.needle.bottom.50percent",
+                    title: "胎压",
+                    value: tireSummary,
+                    alert: state?.hasTireWarning == true
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(value: HomeRoute.trips) {
+                statusCard(icon: "road.lanes", title: "今日行程", value: todayTripSummary)
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(value: HomeRoute.location) {
+                statusCard(
+                    icon: "location.fill",
+                    title: "车辆位置",
+                    value: store.locationName ?? "查看位置",
+                    tint: LeapStyle.link
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// 一张状态卡：一行小图标 + 标题，下面一行值。
+    private func statusCard(
+        icon: String,
+        title: String,
+        value: String,
+        alert: Bool = false,
+        tint: Color = LeapStyle.secondaryLabel
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .medium))
+                Text(title)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(LeapStyle.secondaryLabel)
+
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(alert ? LeapStyle.alert : (tint == LeapStyle.secondaryLabel ? LeapStyle.ink : tint))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LeapStyle.surface, in: .rect(cornerRadius: 14, style: .continuous))
+        .contentShape(.rect(cornerRadius: 14, style: .continuous))
+    }
+
+    private var doorWindowSummary: String {
+        guard let state else { return "--" }
+        if state.anyDoorOpen { return "有车门未关" }
+        if state.anyWindowOpen == true { return "车窗未关" }
+        return "全部关闭"
+    }
+
+    private var todayTripSummary: String {
+        let all = store.isDemo ? ReviewDemo.tripLog : tripRecorder.trips
+        let today = all.filter { Calendar.current.isDateInToday($0.startAt) }
+        guard !today.isEmpty else { return "今天还没跑" }
+        let km = today.reduce(0) { $0 + $1.distanceKm }
+        return "\(today.count) 趟 · \(Int(km.rounded())) km"
     }
 
     private var dashboardHeader: some View {
@@ -888,12 +1047,9 @@ private struct VehicleHero<Badge: View>: View {
                 // 它就是最终画面，而不是留一块空白。3D 出来后盖在它上面。
                 staticVehicle.opacity(is3DReady ? 0 : 1)
             }
-            // 车模坐在一张自己的「面」上：底色 + 环境光 + 车下柔光 + 落影。
-            // 挂 background 不参与布局，卡片多高仍由车图层决定。
-            .background { heroSurface }
-            .clipShape(.rect(cornerRadius: 34, style: .continuous))
-            .overlay(alignment: .bottom) { heroFade }
-            .overlay { heroEdge }
+            // 车直接站在画布上：不再有卡片、没有描边，只有身后一束光和脚下一片影。
+            // 特斯拉那套的观感就是这么来的——四周是纯黑，车是唯一亮的东西。
+            .background { heroGlow }
             // 纯装饰。锁车状态由下面那排徽章负责播报，这里再念一遍「汽车」是噪音。
             .accessibilityHidden(true)
             // 3D 资源被撤走或换成另一台车的目录时必须把就绪/失败位清掉：
@@ -912,49 +1068,21 @@ private struct VehicleHero<Badge: View>: View {
         .padding(.bottom, 2)
     }
 
-    /// 车模所在的卡片表面。
-    ///
-    /// 参考 `stephenwang1011/leapauto` 的做法：车不是浮在页面底色上，而是停在一块**有材质的面**上——
-    /// 一层浅渐变 + 左上角极淡的环境光 + 车下一团白色柔光 + 一片模糊落影。
-    /// 有了这块面，车模和页面之间就有了「这是展台」的交代，不会像贴纸一样突兀。
-    ///
-    /// 挂在 `.background` 里，不参与布局：卡片多高由车图层决定，2D/3D 切换时不会跳。
-    private var heroSurface: some View {
+    /// 车身后的一束光 + 脚下一片模糊落影。挂在 `.background` 里，不参与布局。
+    private var heroGlow: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = proxy.size.height
             ZStack {
-                LinearGradient(
-                    colors: colorScheme == .dark
-                        ? [Color(red: 0.17, green: 0.18, blue: 0.20),
-                           Color(red: 0.13, green: 0.14, blue: 0.16),
-                           Color(red: 0.09, green: 0.10, blue: 0.11)]
-                        : [Color.white,
-                           Color(red: 0.975, green: 0.978, blue: 0.985),
-                           Color.white.opacity(0.92)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                // 环境光：跟着车况走，但只给一点点——它是氛围，不是主角。
                 RadialGradient(
-                    colors: [ambientColor.opacity(colorScheme == .dark ? 0.16 : 0.13), .clear],
-                    center: UnitPoint(x: 0.16, y: 0.12),
-                    startRadius: 4,
-                    endRadius: width * 0.6
+                    colors: [ambientColor.opacity(colorScheme == .dark ? 0.13 : 0.10), .clear],
+                    center: UnitPoint(x: 0.5, y: 0.46),
+                    startRadius: 8,
+                    endRadius: width * 0.66
                 )
 
-                // 车下柔光：leapauto 那张首卡里最提气的一层，白光从车底往外漫。
-                RadialGradient(
-                    colors: [Color.white.opacity(colorScheme == .dark ? 0.13 : 0.85), .clear],
-                    center: UnitPoint(x: 0.5, y: 0.76),
-                    startRadius: 6,
-                    endRadius: width * 0.52
-                )
-
-                // 落影：压在车轮下方。模糊过，所以偏一点也不像错位。
                 Ellipse()
-                    .fill(colorScheme == .dark ? Color.black.opacity(0.42) : Color.black.opacity(0.10))
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.07) : Color.black.opacity(0.09))
                     .frame(width: width * 0.50, height: max(12, height * 0.045))
                     .blur(radius: max(9, height * 0.045))
                     .position(x: width / 2, y: height * 0.82)
@@ -970,42 +1098,7 @@ private struct VehicleHero<Badge: View>: View {
         return LeapStyle.cool
     }
 
-    /// 卡片底部向外渐隐到页面色，去掉那道生硬的横切边。
-    private var heroFade: some View {
-        LinearGradient(
-            colors: [.clear,
-                     pageColor.opacity(colorScheme == .dark ? 0.55 : 0.75),
-                     pageColor],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: 78)
-        .allowsHitTesting(false)
-    }
-
-    /// 页面底色（近似 `LeapBackground` 的落点），只用来做渐隐。
-    private var pageColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.05, green: 0.055, blue: 0.06)
-            : Color(red: 0.945, green: 0.952, blue: 0.965)
-    }
-
-    /// 卡片边缘：顶部一道高光，往下收掉。比整圈描边更像玻璃。
-    private var heroEdge: some View {
-        RoundedRectangle(cornerRadius: 34, style: .continuous)
-            .strokeBorder(
-                LinearGradient(
-                    colors: [Color.white.opacity(colorScheme == .dark ? 0.18 : 0.85),
-                             Color.white.opacity(0.02)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 1
-            )
-            .allowsHitTesting(false)
-    }
-
-    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。
+    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。    /// 按车况叠出来的官方车图，没有就退回剪影。也充当 3D 加载期间的占位。
     @ViewBuilder
     private var staticVehicle: some View {
         if let composition = store.carComposition {

@@ -48,14 +48,15 @@ struct ChargingCard: View {
     }
 
     var body: some View {
-        GlassCard(radius: LeapStyle.tileRadius) {
-            VStack(alignment: .leading, spacing: 12) {
-                header
-                headline
-                progressBar
-                footer
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            headline
+            progressBar
+            footer
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LeapStyle.surface, in: .rect(cornerRadius: 16, style: .continuous))
     }
 
     private var header: some View {

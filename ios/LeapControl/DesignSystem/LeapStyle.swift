@@ -25,19 +25,31 @@ enum LeapStyle {
     /// 色相压得比常见的「新能源绿」更暗、更灰，配暖白纸感底色才不刺眼。
     static let accent = adaptive(
         light: Color(red: 0.18, green: 0.42, blue: 0.31),
-        dark: Color(red: 0.50, green: 0.78, blue: 0.62)
+        dark: Color(red: 0.19, green: 0.82, blue: 0.35)
+    )
+
+    /// 卡片底色。暗色下比纯黑亮一档，卡片才浮得起来；浅色下就是白。
+    static let surface = adaptive(
+        light: Color.white,
+        dark: Color(red: 0.086, green: 0.086, blue: 0.094)
+    )
+
+    /// 链接色：只给「能点进去」的那几处（位置、充电上限）。
+    static let link = adaptive(
+        light: Color(red: 0.18, green: 0.36, blue: 0.82),
+        dark: Color(red: 0.24, green: 0.42, blue: 0.88)
     )
 
     /// 界面主色：墨。选中态、主按钮、Tab 用它。
     static let ink = adaptive(
         light: Color(red: 0.12, green: 0.11, blue: 0.09),
-        dark: Color(red: 0.95, green: 0.94, blue: 0.91)
+        dark: Color(red: 0.96, green: 0.96, blue: 0.97)
     )
 
     /// 警示：砖红。胎压异常、门没关、没锁车。
     static let alert = adaptive(
         light: Color(red: 0.70, green: 0.15, blue: 0.12),
-        dark: Color(red: 1.0, green: 0.60, blue: 0.55)
+        dark: Color(red: 1.0, green: 0.27, blue: 0.23)
     )
 
     /// 冷色：石灰。位置、导航这类中性信息。
@@ -87,13 +99,13 @@ enum LeapStyle {
     /// 卡片和背景会糊成一片，得手动描一道。
     static let glassEdge = adaptive(
         light: Color(red: 0.85, green: 0.83, blue: 0.79),
-        dark: Color.white.opacity(0.14)
+        dark: Color.white.opacity(0.10)
     )
 
     /// 卡片里那条分隔线。比 `.quaternary` 更淡一点，成排卡片看着才不吵。
     static let hairline = adaptive(
         light: Color(red: 0.855, green: 0.835, blue: 0.796),
-        dark: Color(red: 0.23, green: 0.21, blue: 0.19)
+        dark: Color(red: 0.14, green: 0.14, blue: 0.15)
     )
 
     /// SwiftUI 没有直接声明明暗两套颜色的写法，绕一下 UIKit。
@@ -130,9 +142,9 @@ struct LeapBackground: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.10, green: 0.095, blue: 0.085),
-                    Color(red: 0.07, green: 0.065, blue: 0.058),
-                    Color(red: 0.045, green: 0.042, blue: 0.038)
+                    Color.black,
+                    Color.black,
+                    Color.black
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -140,10 +152,10 @@ struct LeapBackground: View {
 
             // 只留一片中性顶光。彩色极光会把车模盖住——车才是这一页的主角。
             RadialGradient(
-                colors: [Color.white.opacity(0.06), .clear],
-                center: .init(x: 0.5, y: 0.02),
+                colors: [Color.white.opacity(0.05), .clear],
+                center: .init(x: 0.5, y: 0.06),
                 startRadius: 10,
-                endRadius: 420
+                endRadius: 380
             )
         }
     }
@@ -175,7 +187,7 @@ struct LeapBackground: View {
     /// 暗角。四周压一点点，视觉重心收到中间。
     private var vignette: some View {
         RadialGradient(
-            colors: [.clear, .clear, Color.black.opacity(isDark ? 0.40 : 0.08)],
+            colors: [.clear, .clear, Color.black.opacity(isDark ? 0.0 : 0.08)],
             center: .init(x: 0.5, y: 0.38),
             startRadius: 80,
             endRadius: 640

@@ -145,10 +145,10 @@ struct QuickControlBar: View {
             }
         }
         .commandBusy(store.isSendingCommand)
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
-        .padding(.bottom, overflow ? 8 : 12)
-        .leapGlass(.regular, in: .rect(cornerRadius: LeapStyle.tileRadius))
+        // 不再套一层玻璃卡：按钮直接坐在画布上，和车、续航块共用同一个背景。
+        // 一页里只允许有两类面——画布、和窄卡片。
+        .padding(.horizontal, 2)
+        .padding(.vertical, 2)
     }
 
     /// 摆一行控制格。不足一行时补空，格子宽度不变，列才对得齐。
@@ -354,7 +354,7 @@ struct QuickControlButton: View {
     /// 常态是描边、激活是实心——和 `docs/UI-PROPOSAL.md` 里方向 G 的按键一个逻辑：
     /// 平时只有一圈线，按下去被填满，扫一眼就知道哪几个是开着的。
     private var circleFill: Color {
-        highlighted ? LeapStyle.accent : .clear
+        highlighted ? LeapStyle.accent : LeapStyle.surface
     }
 
     var body: some View {
@@ -370,6 +370,8 @@ struct QuickControlButton: View {
                         .overlay {
                             Circle().stroke(highlighted ? .clear : LeapStyle.hairline, lineWidth: 1)
                         }
+                        .shadow(color: highlighted ? LeapStyle.accent.opacity(0.25) : .clear,
+                                radius: 8, y: 2)
                         .shadow(color: highlighted ? LeapStyle.accent.opacity(0.35) : .clear,
                                 radius: 8, y: 3)
 
