@@ -5,6 +5,10 @@ import SwiftUI
 /// 参照原厂控车 App 的充电卡：上面一行状态与功率，中间一个大号的「还剩多久」，
 /// 下面一条进度（当前电量 → 目标电量），最后一行是已充度数的流水。
 ///
+/// 右上角有一个小三角，点开才露出「结束充电」：停充是**不可撤回**的动作
+/// （停完要重新插枪或上车操作才能继续），不摆在明面上，避免手掌擦一下就停掉一晚上的充电。
+/// 展开之后再问一次，文案和充电页保持一致。
+///
 /// 剩余时间的来源有优先级：
 /// 1. 车自己报的剩余分钟（`chargeRemainMinutes`）——最准，直接信；
 /// 2. 没有就按「还差多少度 ÷ 当前功率」估，度数用 `ChargeRecorder` 学出来的
@@ -19,6 +23,11 @@ struct ChargingCard: View {
     /// 充了一夜显示「已充 1 分钟」纯粹是误导，宁可不展示。
     var active: ChargeRecord?
     var kwhPerPercent: Double?
+
+    @Environment(VehicleStore.self) private var store
+    /// 「结束充电」是否已展开。默认收起——见类型注释。
+    @State private var showStopAction = false
+    @State private var confirmingStop = false
 
     /// 目标电量。车没报就按 100% 算。
     private var target: Int { min(100, max(1, state.chargeLimit ?? 100)) }
@@ -56,6 +65,12 @@ struct ChargingCard: View {
             headline
             progressBar
             footer
+
+            // 展开后才占高度：收起时卡片和原来一模一样，不因为多了个入口变高。
+            if showStopAction {
+                stopAction
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,6 +101,56 @@ struct ChargingCard: View {
                     .monospacedDigit()
                     .foregroundStyle(LeapStyle.ink)
             }
+
+            // 22pt 的小三角，比整张卡片可点安全：卡片本身还要显示信息，
+            // 整块可点会让「想看数据」和「想停充电」撞在同一个手势上。
+            Button {
+                withAnimation(.smooth(duration: 0.24)) { showStopAction.toggle() }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(LeapStyle.secondaryLabel)
+                    .rotationEffect(.degrees(showStopAction ? 180 : 0))
+                    .frame(width: 22, height: 22)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("更多充电操作")
+            .accessibilityHint(showStopAction ? "收起结束充电" : "展开结束充电")
+        }
+    }
+
+    /// 「结束充电」。**红色实心文字 + 10% 红底**：这是这张卡里唯一能做破坏性操作的地方，
+    /// 不能长得像普通按钮；但也不填满整块红，那段面积太大，看着像页面出错了。
+    private var stopAction: some View {
+        Button {
+            confirmingStop = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.slash.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(store.isSendingCommand ? "正在结束…" : "结束充电")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(LeapStyle.alert)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                LeapStyle.alert.opacity(0.10),
+                in: .rect(cornerRadius: 12, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isSendingCommand)
+        // 和充电页同一句：停完不会自己恢复，得重新插枪或上车。
+        .confirmationDialog("结束充电？", isPresented: $confirmingStop, titleVisibility: .visible) {
+            Button("结束充电", role: .destructive) {
+                store.setCharging(start: false)
+                withAnimation(.smooth(duration: 0.2)) { showStopAction = false }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("停止后需要重新插枪或在车机上操作才能继续充电。")
         }
     }
 
