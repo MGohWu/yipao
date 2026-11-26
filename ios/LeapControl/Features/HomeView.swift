@@ -248,49 +248,66 @@ struct HomeView: View {
 
     // MARK: - 续航与状态卡
 
-    /// 续航：全页唯一的大数字，下面一条电池条。点进去是充电页。
+    /// 续航铭牌：**和车共用一条中轴**。
+    ///
+    /// 上一版是「左对齐 36pt 数字 + 横贯整行的电池条 + 右端百分比」，三样东西把页面
+    /// 横向切断，而车模是中轴对称的——数字再大也不成一体，看着就像贴在车下面的一条信息带。
+    ///
+    /// 改成特斯拉 / Tessie 那种排法：数字居中、单位跟在后面，电池条收窄成「一块电池」的宽度
+    /// （不是分隔线），百分比与温度落在下面一行小字。三行同一条中轴，读起来是车的铭牌。
     private var rangeBlock: some View {
         NavigationLink(value: HomeRoute.charge) {
-            VStack(alignment: .leading, spacing: 9) {
+            VStack(spacing: 7) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(rangeValueText)
-                        .font(.system(size: 36, weight: .semibold, design: .rounded))
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
                         .monospacedDigit()
-                        .tracking(-1.4)
+                        .tracking(-1.1)
                         .foregroundStyle(LeapStyle.ink)
                         .contentTransition(.numericText())
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     if state?.hasFuel != true {
                         Text("km")
-                            .font(.system(size: 12))
-                            .foregroundStyle(LeapStyle.secondaryLabel)
-                    }
-                    Spacer(minLength: 8)
-                    if let soc = state?.soc {
-                        Text("\(soc)%")
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(LeapStyle.ink)
-                    }
-                    if let temperature = displayedTemp {
-                        Text("· \(Int(temperature.rounded()))°C")
-                            .font(.system(size: 12))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(LeapStyle.secondaryLabel)
                     }
                 }
+
+                // 固定 168 宽：电池条只表示「这一块电池」，不是一条分隔线。
+                // 宽度恒定，电量变化时页面不会跟着左右呼吸。
                 BatteryBar(
                     soc: state?.soc ?? 0,
                     limit: state?.chargeLimit,
                     charging: state?.isCharging ?? false,
-                    height: 4
+                    height: 3
                 )
+                .frame(width: 168)
+
+                HStack(spacing: 4) {
+                    if let soc = state?.soc {
+                        Text("\(soc)%")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .monospacedDigit()
+                    }
+                    if let temperature = displayedTemp {
+                        if state?.soc != nil {
+                            Text("·")
+                        }
+                        Text("车内 \(Int(temperature.rounded()))°C")
+                    }
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(LeapStyle.secondaryLabel)
+                .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // 居中：整块压在车的中轴上，不再是左对齐的一条带子。
+            .frame(maxWidth: .infinity)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 2)
+        // 往车上贴一点。特斯拉那套里这组数字几乎挨着车底，中间留 14 就散了。
+        .padding(.top, -5)
     }
 
     private var rangeValueText: String {
