@@ -207,16 +207,19 @@ struct QuickControlBar: View {
     private func controlButton(_ control: QuickControl) -> some View {
         switch control {
         case .lock:
-            // 上锁是回到常态，永远不上色。
+            // 上锁这一格代表「现在的状态是锁着的」，所以车锁着时它亮。
+            // 读不到锁状态时**不亮**（`== true` 而不是 `?? true`）：猜一个「已锁」亮起来，
+            // 等于向车主保证了一件我们并不知道的事。
             QuickControlButton(
                 title: "上锁",
                 systemImage: "car.side.lock.fill",
+                highlighted: store.state?.isLocked == true,
                 accessibilityValue: lockStateDescription,
                 action: store.lockCar
             )
             .leapGlassID(control.rawValue, in: namespace)
         case .unlock:
-            // 车没锁是一种「开着」的状态，由这一格亮绿灯来说。读不到锁状态时按锁着画，不亮。
+            // 和「上锁」成对：车没锁时这一格亮，锁着时不亮。读不到状态时两格都不亮。
             QuickControlButton(
                 title: "解锁",
                 systemImage: "car.side.lock.open.fill",
