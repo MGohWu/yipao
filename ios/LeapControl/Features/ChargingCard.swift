@@ -158,7 +158,7 @@ struct ChargingCard: View {
         .monospacedDigit()
     }
 
-    /// 「1 小时 25 分」；不到一小时只给分钟。
+    /// 「1 小时 25 分」；不到一小时只给分钟。给「预计还需」用的，不是已充时长。
     private func durationText(_ minutes: Int) -> String {
         let total = max(1, minutes)
         if total < 60 { return "\(total) 分钟" }

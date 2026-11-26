@@ -372,18 +372,25 @@ struct HomeView: View {
             // 车名、状态、读数连成一组读完，视线正好落到车上。
             // 车下的铭牌拿掉之后，中轴只留车，上下留白变大，更像「一屏只有车」。
             NavigationLink(value: HomeRoute.charge) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // 电量：绿条，轨道用同色低透明度——不同色系混着画，
+                    // 灰轨道配绿填充会让人以为条没填满。
                     meterRow(
                         value: state?.soc.map(String.init) ?? "--",
                         unit: "%",
                         fill: socFraction,
-                        tint: LeapStyle.accent
+                        tint: LeapStyle.accent,
+                        track: LeapStyle.accent.opacity(0.16)
                     )
+                    // 续航：车主真正关心的那个数，字大一号、条厚一档、墨色压到底。
+                    // 原来用 `ink.opacity(0.32)` 画，跟轨道几乎一个灰度，看着像「没填」。
                     meterRow(
                         value: rangeValueText,
                         unit: "km",
                         fill: socFraction,
-                        tint: LeapStyle.ink.opacity(0.32)
+                        tint: LeapStyle.ink.opacity(0.88),
+                        track: LeapStyle.ink.opacity(0.12),
+                        emphasized: true
                     )
                     // 增程车多一条小油量条；纯电车没有这个信号，自然不出现。
                     if let fuel = state?.gasolinePercent {
@@ -391,7 +398,8 @@ struct HomeView: View {
                             value: String(fuel),
                             unit: "%",
                             fill: Double(fuel) / 100,
-                            tint: LeapStyle.ink.opacity(0.32)
+                            tint: LeapStyle.ink.opacity(0.88),
+                            track: LeapStyle.ink.opacity(0.12)
                         )
                     }
                 }
@@ -399,7 +407,7 @@ struct HomeView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .padding(.top, 6)
+            .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 2)
@@ -409,13 +417,32 @@ struct HomeView: View {
     /// 是整数除法，电量不足 100 时结果恒为 0，电量条就只剩一条缝。
     private var socFraction: Double { Double(state?.soc ?? 0) / 100 }
 
-    /// 一行读数：数字区固定 64pt，两条小线的起点永远对齐，不跟着数字长短漂。
-    /// 数字 16pt 半粗，单位缩到 10pt 灰色；条 60×3.5，读起来是仪表不是图表。
-    private func meterRow(value: String, unit: String, fill: Double, tint: Color) -> some View {
+    /// 一行读数。两层是**同一套尺寸**，只有粗细和亮度分主次：
+    ///
+    /// - 数字区固定 66pt、条固定 72pt，两条的左端和右端都对得齐，整组是一个仪表堆，
+    ///   不会因为「512」比「60」宽两格就把下面那条推歪。
+    /// - 电量：15pt 半粗 + 3pt 绿条（轨用同色 16%）。
+    /// - 续航：18pt 粗体 + 4.5pt 墨条（轨 12%、填充 88%）。
+    ///   只比电量高一档、不追平车名（标题 22pt），否则两行数字会跟车名抢层级。
+    ///
+    /// 续航**必须比电量更重**：这台车能开多远，是比「还剩百分之几」更直接的问题，
+    /// 而且续航条原来用 32% 的墨，跟轨道几乎同灰度，读起来像没填。
+    private func meterRow(
+        value: String,
+        unit: String,
+        fill: Double,
+        tint: Color,
+        track: Color,
+        emphasized: Bool = false
+    ) -> some View {
         HStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(
+                        size: emphasized ? 18 : 15,
+                        weight: emphasized ? .bold : .semibold,
+                        design: .rounded
+                    ))
                     .monospacedDigit()
                     .tracking(-0.3)
                     .foregroundStyle(LeapStyle.ink)
@@ -423,18 +450,19 @@ struct HomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(unit)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: emphasized ? 11 : 10, weight: .medium))
                     .foregroundStyle(LeapStyle.secondaryLabel)
             }
-            .frame(width: 64, alignment: .leading)
+            .frame(width: 66, alignment: .leading)
 
+            let barHeight: CGFloat = emphasized ? 4.5 : 3
             Capsule()
-                .fill(.quaternary)
-                .frame(width: 60, height: 3.5)
+                .fill(track)
+                .frame(width: 72, height: barHeight)
                 .overlay(alignment: .leading) {
                     Capsule()
                         .fill(tint)
-                        .frame(width: max(3.5, 60 * min(1, max(0, fill))))
+                        .frame(width: max(barHeight, 72 * min(1, max(0, fill))))
                         .animation(.smooth(duration: 0.6), value: fill)
                 }
         }
