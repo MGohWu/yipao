@@ -137,9 +137,25 @@ struct TripHistoryView: View {
     private func tripRow(_ trip: TripRecord) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(timeText(trip.startAt))
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+                // 出发 → 到达。以前只给出发时间，得自己拿时长去加，
+                // 而且和「补记」那种跨小时的记录对不上号。
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(timeText(trip.startAt))
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                    Text(timeText(trip.endAt))
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                    if crossesMidnight(trip) {
+                        Text("+1")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
                 if trip.isReconstructed {
                     RecordsTag(text: "补记", tint: LeapStyle.caution)
                 } else if trip.hasOfficialData {
@@ -255,6 +271,11 @@ struct TripHistoryView: View {
     }
 
     // MARK: - 格式化
+
+    /// 跨零点的行程：到达时间后面补一个「+1」，不然「23:40 → 00:10」看着像往回走。
+    private func crossesMidnight(_ trip: TripRecord) -> Bool {
+        !Calendar.current.isDate(trip.startAt, inSameDayAs: trip.endAt)
+    }
 
     private func timeText(_ date: Date) -> String {
         date.formatted(date: .omitted, time: .shortened)

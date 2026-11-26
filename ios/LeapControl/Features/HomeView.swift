@@ -856,6 +856,10 @@ private struct VehicleHero<Badge: View>: View {
                     // 1.35 不够：模型转到某些角度（车头朝下那侧）下沿会顶出画布被切掉。
                     // 多出来的高度是从上下两个 Spacer 里拿的，卡片位置不受影响。
                     .frame(height: size * 1.62)
+                    // H5 是按「整页取景」渲的，车四周留了一圈空白——画布本身不能缩小
+                    // （WebGL 会按新尺寸重排，车反而更小），所以把画布整体放大一点，
+                    // 多出来的部分被卡片裁掉。1.16 是量出来的：再大车头会顶到卡片上沿。
+                    .scaleEffect(1.16)
                     .opacity(is3DReady ? 1 : 0)
                     // 回调丢失的兜底在 CarModel3DView 里：从 newInit 真正调下去才计时。
                     // 原来这里从视图创建起算 8 秒，在设置页里刚打开开关时首页被盖着、
@@ -923,10 +927,10 @@ private struct VehicleHero<Badge: View>: View {
 
                 // 车下柔光：leapauto 那张首卡里最提气的一层，白光从车底往外漫。
                 RadialGradient(
-                    colors: [Color.white.opacity(colorScheme == .dark ? 0.10 : 0.75), .clear],
-                    center: UnitPoint(x: 0.5, y: 0.78),
+                    colors: [Color.white.opacity(colorScheme == .dark ? 0.13 : 0.85), .clear],
+                    center: UnitPoint(x: 0.5, y: 0.76),
                     startRadius: 6,
-                    endRadius: width * 0.46
+                    endRadius: width * 0.52
                 )
 
                 // 落影：压在车轮下方。模糊过，所以偏一点也不像错位。
@@ -934,7 +938,7 @@ private struct VehicleHero<Badge: View>: View {
                     .fill(colorScheme == .dark ? Color.black.opacity(0.42) : Color.black.opacity(0.10))
                     .frame(width: width * 0.50, height: max(12, height * 0.045))
                     .blur(radius: max(9, height * 0.045))
-                    .position(x: width / 2, y: height * 0.80)
+                    .position(x: width / 2, y: height * 0.82)
             }
         }
         .allowsHitTesting(false)
@@ -956,7 +960,7 @@ private struct VehicleHero<Badge: View>: View {
             startPoint: .top,
             endPoint: .bottom
         )
-        .frame(height: 96)
+        .frame(height: 78)
         .allowsHitTesting(false)
     }
 
