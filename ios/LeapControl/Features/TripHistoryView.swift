@@ -12,6 +12,8 @@ struct TripHistoryView: View {
     @State private var range: RecordsRange = .week
     /// 地名补齐的进度：正在补哪一条。补的时候那行显示一个细进度条，不遮内容。
     @State private var resolvingID: UUID?
+    /// 长按后待确认删除的那一条。
+    @State private var pendingDelete: TripRecord?
 
     private var vin: String? { store.session.selectedVin }
 
@@ -83,6 +85,22 @@ struct TripHistoryView: View {
         // 地名一个个补，补到就回写文件。只补最近 8 条：更早的那些翻到的概率低，
         // 一进页面就打十几个反地理编码请求，既慢又没必要。
         .task(id: allTrips.prefix(8).map(\.id)) { await resolveMissingPlaces() }
+        .confirmationDialog(
+            "删除这条行程？",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            presenting: pendingDelete
+        ) { trip in
+            Button("删除", role: .destructive) {
+                recorder.delete(trip)
+                pendingDelete = nil
+            }
+            Button("取消", role: .cancel) { pendingDelete = nil }
+        } message: { trip in
+            Text("\(timeText(trip.startAt)) → \(timeText(trip.endAt))，\(trimmed(trip.distanceKm)) km。")
+        }
     }
 
     // MARK: - 汇总
@@ -193,6 +211,16 @@ struct TripHistoryView: View {
             }
 
             RecordsMeta(items: metaItems(trip))
+        }
+        // 隐藏功能：长按弹出删除。不放可见的删除按钮——这一页是拿来看的，
+        // 每行挂一个删除图标会把版面弄脏，还容易被误触。
+        .contentShape(.rect)
+        .contextMenu {
+            Button(role: .destructive) {
+                pendingDelete = trip
+            } label: {
+                Label("删除这条记录", systemImage: "trash")
+            }
         }
     }
 

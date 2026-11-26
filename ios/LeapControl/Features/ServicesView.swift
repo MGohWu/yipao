@@ -13,7 +13,8 @@ enum ServiceRoute: Hashable {
     case mileage
 }
 
-/// 底部第四个 Tab：放「跟车有关的历史记录」。
+/// 底部第四个 Tab：放「跟车有关的历史记录」。Tab 上写「记录」——
+/// 里面全是过去发生过的事，叫「服务」会让人以为这里能约保养。
 ///
 /// 为什么不塞进「功能」页：功能页是**现在能对车做的操作**（开空调、开窗、找车），
 /// 而这里放的是**过去发生过什么**。两者的使用节奏完全不同——操作是一进去就按，
@@ -43,7 +44,7 @@ struct ServicesView: View {
                 await store.syncChargeLog()
             }
         }
-        .navigationTitle("服务")
+        .navigationTitle("记录")
         .navigationBarTitleDisplayMode(.large)
         .task {
             await store.syncTripLog()

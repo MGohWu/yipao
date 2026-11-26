@@ -224,6 +224,26 @@ enum TripLogStore {
         return (try? JSONDecoder().decode([TripRecord].self, from: data)) ?? []
     }
 
+    /// 被用户删掉的记录。
+    ///
+    /// 只删列表里那一条是不够的：云端那批记录每次同步都会重新合并回来，
+    /// 用户删掉的官方行程下一次刷新就会「复活」。所以删除要记进这份清单，
+    /// 合并时把对应的 `officialKey` 直接跳过。键里同时存本机的 `id`，
+    /// 这样删一条纯本机记录也能记住。
+    private static var deletedURL: URL? {
+        directory?.appendingPathComponent("trip-deleted.json")
+    }
+
+    static func loadDeleted() -> Set<String> {
+        guard let deletedURL, let data = try? Data(contentsOf: deletedURL) else { return [] }
+        return Set((try? JSONDecoder().decode([String].self, from: data)) ?? [])
+    }
+
+    static func saveDeleted(_ keys: Set<String>) {
+        guard let deletedURL, let data = try? JSONEncoder().encode(Array(keys)) else { return }
+        try? data.write(to: deletedURL, options: .atomic)
+    }
+
     static func save(_ trips: [TripRecord]) {
         guard let fileURL else { return }
         let trimmed = Array(trips.sorted { $0.startAt > $1.startAt }.prefix(limit))

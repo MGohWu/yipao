@@ -174,6 +174,22 @@ struct CloudTripMergeTests {
         #expect(second.trips.isEmpty)
     }
 
+    @Test("删掉的官方行程，下次同步不会复活")
+    func deletedOfficialRowStaysDeleted() throws {
+        let cloud = CloudTripParser.records(
+            from: [row(start: t0, minutes: 20, km: 9)], vin: "V"
+        )
+        let first = CloudTripMerge.merge(local: [], cloud: cloud, window: window())
+        let key = try #require(first.trips.first?.officialKey)
+
+        // 用户长按删掉了这一条：本机列表空了，但云端那条还在。
+        let second = CloudTripMerge.merge(
+            local: [], cloud: cloud, window: window(), hiddenKeys: [key]
+        )
+        #expect(second.trips.isEmpty, "删掉的记录不能被云端合并回来")
+        #expect(second.added == 0)
+    }
+
     @Test("窗口之外的官方记录不动——只拉了 30 天，不能把更早的删掉")
     func olderOfficialRowsSurviveANarrowWindow() {
         let old = TripRecord(

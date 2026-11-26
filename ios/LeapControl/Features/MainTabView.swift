@@ -48,7 +48,7 @@ struct MainTabView: View {
                 }
             }
 
-            Tab("服务", systemImage: "wrench.and.screwdriver.fill", value: .services) {
+            Tab("记录", systemImage: "list.bullet.rectangle.fill", value: .services) {
                 NavigationStack(path: $servicePath) {
                     ServicesView()
                         .navigationDestination(for: ServiceRoute.self) { route in

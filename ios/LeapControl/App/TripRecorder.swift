@@ -32,6 +32,8 @@ final class TripRecorder: ObservableObject {
     /// 正在跑的这一趟。没有就是 nil。
     @Published private(set) var active: TripRecord?
     @Published private(set) var cloudSync: CloudSync = .idle
+    /// 用户删掉的记录（本机 id 与云端 key 都在里面）。合并时用它挡住「复活」。
+    private(set) var hiddenKeys: Set<String>
 
     /// 多久重新同步一次。云端记录是「结算」数据，一趟跑完要过一会儿才出现，
     /// 所以没必要每次进页面都拉——6 小时一次，加上下拉手动刷新，够用且不打扰服务端。
@@ -61,6 +63,7 @@ final class TripRecorder: ObservableObject {
 
     private init() {
         trips = TripLogStore.load()
+        hiddenKeys = TripLogStore.loadDeleted()
         if let stamp = defaults.object(forKey: Self.lastSyncKey) as? Date {
             cloudSync = .synced(stamp, 0)
         }
@@ -120,10 +123,13 @@ final class TripRecorder: ObservableObject {
         // 正在跑的这一趟还没结算，云端不会有它；万一有（上一趟刚结束、我们还没收尾），
         // 先跳过——等它真的结束了再合，否则列表里会同时出现「进行中」和「官方那一趟」。
         let filtered = records.filter { record in
+            guard !hiddenKeys.contains(record.key) else { return false }
             guard let active else { return true }
             return CloudTripMerge.intersection(active.startAt, active.endAt, record.startAt, record.endAt) <= 0
         }
-        let result = CloudTripMerge.merge(local: trips, cloud: filtered, window: window)
+        let result = CloudTripMerge.merge(
+            local: trips, cloud: filtered, window: window, hiddenKeys: hiddenKeys
+        )
         trips = result.trips
         TripLogStore.save(trips)
         if result.added > 0 || result.matched > 0 || result.dropped > 0 {
@@ -150,6 +156,22 @@ final class TripRecorder: ObservableObject {
         let count = consecutiveFailures + 1
         defaults.set(count, forKey: Self.failureCountKey)
         cloudSync = .failed(count >= Self.giveUpAfter ? "" : message)
+    }
+
+    /// 删除一条记录（列表里长按触发）。
+    ///
+    /// 同时记下 `id` 和 `officialKey`：前者让这条本机记录不再出现，后者挡住下一次同步
+    /// 把同一条官方行程合并回来。删除是不可撤销的——界面那边要先确认再调这里。
+    func delete(_ trip: TripRecord) {
+        trips.removeAll { $0.id == trip.id }
+        hiddenKeys.insert(trip.id.uuidString)
+        if let key = trip.officialKey { hiddenKeys.insert(key) }
+        TripLogStore.saveDeleted(hiddenKeys)
+        TripLogStore.save(trips)
+        BLEDiagnostics.record(
+            "trip",
+            "删除一条记录 官方=\(trip.officialKey ?? "-") 剩\(trips.count)条 隐藏\(hiddenKeys.count)条"
+        )
     }
 
     /// 地名异步补齐之后回写。找不到就保持原样，不写「未知地点」这种占位。
