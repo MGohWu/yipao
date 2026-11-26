@@ -345,11 +345,13 @@ struct QuickControlButton: View {
     @State private var taps = 0
 
     private var glyphColor: Color {
-        highlighted ? .white : LeapStyle.primaryLabel.opacity(0.72)
+        highlighted ? .white : LeapStyle.ink.opacity(0.78)
     }
 
+    /// 常态是描边、激活是实心——和 `docs/UI-PROPOSAL.md` 里方向 G 的按键一个逻辑：
+    /// 平时只有一圈线，按下去被填满，扫一眼就知道哪几个是开着的。
     private var circleFill: Color {
-        highlighted ? LeapStyle.accent : LeapStyle.primaryLabel.opacity(0.06)
+        highlighted ? LeapStyle.accent : .clear
     }
 
     var body: some View {
@@ -361,15 +363,15 @@ struct QuickControlButton: View {
                 ZStack {
                     Circle()
                         .fill(circleFill)
-                        .frame(width: 46, height: 46)
+                        .frame(width: 44, height: 44)
                         .overlay {
-                            Circle().stroke(highlighted ? .clear : LeapStyle.glassEdge, lineWidth: 0.8)
+                            Circle().stroke(highlighted ? .clear : LeapStyle.hairline, lineWidth: 1)
                         }
                         .shadow(color: highlighted ? LeapStyle.accent.opacity(0.35) : .clear,
                                 radius: 8, y: 3)
 
                     Image(systemName: systemImage)
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(glyphColor)
                         .symbolEffect(.bounce, value: taps)
@@ -378,7 +380,8 @@ struct QuickControlButton: View {
                 .animation(.smooth(duration: 0.26), value: highlighted)
 
                 Text(title)
-                    .font(.caption2.weight(highlighted ? .semibold : .medium))
+                    .font(.system(size: 11, weight: highlighted ? .semibold : .regular))
+                    .tracking(0.3)
                     .foregroundStyle(highlighted ? LeapStyle.accent : LeapStyle.secondaryLabel)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -405,8 +408,8 @@ private struct QuickControlPressStyle: ButtonStyle {
         configuration.label
             .background {
                 Circle()
-                    .fill(LeapStyle.accent.opacity(configuration.isPressed ? 0.16 : 0))
-                    .frame(width: 58, height: 58)
+                    .fill(LeapStyle.accent.opacity(configuration.isPressed ? 0.14 : 0))
+                    .frame(width: 56, height: 56)
                     .offset(y: -8)
             }
             .scaleEffect(configuration.isPressed ? 0.90 : 1)

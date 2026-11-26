@@ -21,57 +21,57 @@ enum LeapStyle {
     // 注意：这些色同时被拿去画背景的极光。极光是大面积色块，用不了压暗的版本，
     // 所以 `LeapBackground` 会按明暗各自混色，见那边的说明。
 
-    /// 强调色：能量绿。**只表示「有电在流动」**——充电中、刚充满、电量健康。
-    /// 浅色版压得比较深，因为它还要当文字用（#00C853 铺在白底上只有 2.2:1，读不清）。
+    /// 强调色：深绿。**只表示「有电在流动」**——充电中、刚充满、电量健康。
+    /// 色相压得比常见的「新能源绿」更暗、更灰，配暖白纸感底色才不刺眼。
     static let accent = adaptive(
-        light: Color(red: 0.0, green: 0.48, blue: 0.24),
-        dark: Color(red: 0.28, green: 0.86, blue: 0.53)
+        light: Color(red: 0.18, green: 0.42, blue: 0.31),
+        dark: Color(red: 0.50, green: 0.78, blue: 0.62)
     )
 
-    /// 界面主色：墨。选中态、主按钮、Tab 用它。中性色不会跟状态色抢注意力。
+    /// 界面主色：墨。选中态、主按钮、Tab 用它。
     static let ink = adaptive(
-        light: Color(red: 0.10, green: 0.11, blue: 0.12),
-        dark: Color(red: 0.92, green: 0.93, blue: 0.94)
+        light: Color(red: 0.12, green: 0.11, blue: 0.09),
+        dark: Color(red: 0.95, green: 0.94, blue: 0.91)
     )
 
-    /// 警示：告警红。胎压异常、门没关、没锁车。
+    /// 警示：砖红。胎压异常、门没关、没锁车。
     static let alert = adaptive(
-        light: Color(red: 0.85, green: 0.18, blue: 0.13),
-        dark: Color(red: 1.0, green: 0.54, blue: 0.50)
+        light: Color(red: 0.70, green: 0.15, blue: 0.12),
+        dark: Color(red: 1.0, green: 0.60, blue: 0.55)
     )
 
-    /// 冷色：灰蓝。位置、导航这类中性信息。
+    /// 冷色：石灰。位置、导航这类中性信息。
     static let cool = adaptive(
-        light: Color(red: 0.26, green: 0.33, blue: 0.42),
-        dark: Color(red: 0.62, green: 0.70, blue: 0.80)
+        light: Color(red: 0.43, green: 0.41, blue: 0.38),
+        dark: Color(red: 0.72, green: 0.70, blue: 0.66)
     )
-    /// 暖色：琥珀。座椅/方向盘加热。
+    /// 暖色：赭石。座椅/方向盘加热。
     static let warm = adaptive(
-        light: Color(red: 0.65, green: 0.33, blue: 0.02),
-        dark: Color(red: 1.0, green: 0.71, blue: 0.30)
+        light: Color(red: 0.55, green: 0.35, blue: 0.11),
+        dark: Color(red: 0.90, green: 0.72, blue: 0.45)
     )
-    /// 提醒：和告警同色系，但轻一档——补记、暂不可用这类「知道就好」的状态。
+    /// 提醒：和告警同色系但轻一档——补记、暂不可用这类「知道就好」的状态。
     static let caution = adaptive(
-        light: Color(red: 0.62, green: 0.36, blue: 0.0),
-        dark: Color(red: 1.0, green: 0.82, blue: 0.54)
+        light: Color(red: 0.52, green: 0.38, blue: 0.12),
+        dark: Color(red: 1.0, green: 0.82, blue: 0.58)
     )
 
     /// 除霜专用。不能用 `.primary`：深色模式下它是纯白，玻璃按钮被白色一染就成了亮底。
     static let frost = adaptive(
-        light: Color(red: 0.02, green: 0.42, blue: 0.48),
-        dark: Color(red: 0.36, green: 0.86, blue: 0.90)
+        light: Color(red: 0.10, green: 0.40, blue: 0.42),
+        dark: Color(red: 0.42, green: 0.82, blue: 0.84)
     )
 
-    /// 「有值但不是当前重点」的填充，比如空调关着时亮起的风量柱。
+    /// 「有值但不是当前重点」的填充。
     static let mutedFill = adaptive(
-        light: Color(white: 0.52),
+        light: Color(white: 0.55),
         dark: Color(white: 1.0).opacity(0.6)
     )
 
     /// 首页那辆车的填充。不能用 `.primary`——浅色下会变成一整块纯黑剪影。
     static let vehicleSilhouette = adaptive(
-        light: Color(white: 0.44),
-        dark: Color(white: 1.0).opacity(0.9)
+        light: Color(red: 0.30, green: 0.28, blue: 0.25),
+        dark: Color(red: 0.95, green: 0.94, blue: 0.91)
     )
 
     /// `.primary` / `.secondary` 的**具体颜色**版本，专门给 `.tint(...)` 用。
@@ -86,14 +86,14 @@ enum LeapStyle {
     /// 玻璃降级后的边缘线。iOS 26 的液态玻璃自带边缘高光，低版本的毛玻璃没有，
     /// 卡片和背景会糊成一片，得手动描一道。
     static let glassEdge = adaptive(
-        light: Color.black.opacity(0.08),
+        light: Color(red: 0.85, green: 0.83, blue: 0.79),
         dark: Color.white.opacity(0.14)
     )
 
     /// 卡片里那条分隔线。比 `.quaternary` 更淡一点，成排卡片看着才不吵。
     static let hairline = adaptive(
-        light: Color.black.opacity(0.07),
-        dark: Color.white.opacity(0.09)
+        light: Color(red: 0.855, green: 0.835, blue: 0.796),
+        dark: Color(red: 0.23, green: 0.21, blue: 0.19)
     )
 
     /// SwiftUI 没有直接声明明暗两套颜色的写法，绕一下 UIKit。
@@ -130,9 +130,9 @@ struct LeapBackground: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.09, green: 0.10, blue: 0.11),
-                    Color(red: 0.05, green: 0.055, blue: 0.06),
-                    Color(red: 0.025, green: 0.03, blue: 0.035)
+                    Color(red: 0.10, green: 0.095, blue: 0.085),
+                    Color(red: 0.07, green: 0.065, blue: 0.058),
+                    Color(red: 0.045, green: 0.042, blue: 0.038)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -154,9 +154,9 @@ struct LeapBackground: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.975, green: 0.978, blue: 0.985),
-                    Color(red: 0.945, green: 0.952, blue: 0.965),
-                    Color(red: 0.905, green: 0.918, blue: 0.938)
+                    Color(red: 0.972, green: 0.962, blue: 0.942),
+                    Color(red: 0.955, green: 0.944, blue: 0.922),
+                    Color(red: 0.925, green: 0.914, blue: 0.888)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -164,7 +164,7 @@ struct LeapBackground: View {
 
             // 顶部一层极淡的白，模拟屏幕边缘的反射，避免整片灰到底。
             RadialGradient(
-                colors: [.white.opacity(0.9), .clear],
+                colors: [Color.white.opacity(0.85), .clear],
                 center: .init(x: 0.5, y: -0.05),
                 startRadius: 10,
                 endRadius: 480

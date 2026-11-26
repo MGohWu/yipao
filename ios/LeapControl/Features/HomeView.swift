@@ -57,6 +57,8 @@ struct HomeView: View {
     private static let tileFooterHeight: CGFloat = 18
 
     @Environment(VehicleStore.self) private var store
+    /// 充电模块要显示「已充多少度、多久」，这两项只有 ChargeRecorder 有。
+    @StateObject private var chargeRecorder = ChargeRecorder.shared
     @State private var showWindows = false
     @State private var showTrunk = false
     @State private var showSunshade = false
@@ -84,6 +86,13 @@ struct HomeView: View {
 
     private var state: VehicleState? { store.state }
 
+    /// 在不在充电。`1149` 偶尔不报，所以功率够大也算——不然插着枪却不显示卡片。
+    private var isChargingNow: Bool {
+        guard let state else { return false }
+        if state.isCharging { return true }
+        return (state.chargePowerKW ?? 0) >= 0.5 && state.chargeGunConnected != false
+    }
+
     /// 背景色随车辆当前最显著的状态走。
     private var backgroundTint: Color {
         if state?.isCharging == true { return LeapStyle.accent }
@@ -103,6 +112,16 @@ struct HomeView: View {
                         VStack(spacing: 14) {
                             dashboardHeader
                             VehicleHero(size: heroSize, badges: statusBadges)
+                            if isChargingNow, let liveState = state {
+                                // 原厂 App 把充电信息摆在首屏靠上的位置：插着枪时
+                                // 「还要多久」比什么都重要，所以放在控制条之前。
+                                ChargingCard(
+                                    state: liveState,
+                                    active: chargeRecorder.active,
+                                    kwhPerPercent: chargeRecorder.kwhPerPercent
+                                )
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
                             QuickControlBar(
                                 showTrunk: $showTrunk,
                                 showSunshade: $showSunshade,
