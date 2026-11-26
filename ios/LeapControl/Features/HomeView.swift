@@ -114,7 +114,6 @@ struct HomeView: View {
                         VStack(spacing: 14) {
                             dashboardHeader
                             VehicleHero(size: heroSize, badges: statusBadges)
-                            rangeBlock
 
                             if isChargingNow, let liveState = state {
                                 // 充电时这张卡提到控制条上方：插着枪，「还要多久」比什么都重要。
@@ -248,68 +247,6 @@ struct HomeView: View {
 
     // MARK: - 续航与状态卡
 
-    /// 续航铭牌：**和车共用一条中轴**。
-    ///
-    /// 上一版是「左对齐 36pt 数字 + 横贯整行的电池条 + 右端百分比」，三样东西把页面
-    /// 横向切断，而车模是中轴对称的——数字再大也不成一体，看着就像贴在车下面的一条信息带。
-    ///
-    /// 改成特斯拉 / Tessie 那种排法：数字居中、单位跟在后面，电池条收窄成「一块电池」的宽度
-    /// （不是分隔线），百分比与温度落在下面一行小字。三行同一条中轴，读起来是车的铭牌。
-    private var rangeBlock: some View {
-        NavigationLink(value: HomeRoute.charge) {
-            VStack(spacing: 7) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(rangeValueText)
-                        .font(.system(size: 30, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .tracking(-1.1)
-                        .foregroundStyle(LeapStyle.ink)
-                        .contentTransition(.numericText())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    if state?.hasFuel != true {
-                        Text("km")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(LeapStyle.secondaryLabel)
-                    }
-                }
-
-                // 固定 168 宽：电池条只表示「这一块电池」，不是一条分隔线。
-                // 宽度恒定，电量变化时页面不会跟着左右呼吸。
-                BatteryBar(
-                    soc: state?.soc ?? 0,
-                    limit: state?.chargeLimit,
-                    charging: state?.isCharging ?? false,
-                    height: 3
-                )
-                .frame(width: 168)
-
-                HStack(spacing: 4) {
-                    if let soc = state?.soc {
-                        Text("\(soc)%")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .monospacedDigit()
-                    }
-                    if let temperature = displayedTemp {
-                        if state?.soc != nil {
-                            Text("·")
-                        }
-                        Text("车内 \(Int(temperature.rounded()))°C")
-                    }
-                }
-                .font(.system(size: 11))
-                .foregroundStyle(LeapStyle.secondaryLabel)
-                .lineLimit(1)
-            }
-            // 居中：整块压在车的中轴上，不再是左对齐的一条带子。
-            .frame(maxWidth: .infinity)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        // 往车上贴一点。特斯拉那套里这组数字几乎挨着车底，中间留 14 就散了。
-        .padding(.top, -5)
-    }
-
     private var rangeValueText: String {
         guard let state else { return "--" }
         if state.hasFuel, let energy = state.energyRange { return "\(energy)" }
@@ -419,14 +356,86 @@ struct HomeView: View {
             Text(store.vehicleName)
                 .font(.title2.weight(.semibold))
                 .lineLimit(1)
-            Text(subtitle)
+            Text(subtitleWithTemp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .contentTransition(.numericText())
+
+            // 电量 / 续航收成两行小读数，跟在车名底下：左上角是阅读起点，
+            // 车名、状态、读数连成一组读完，视线正好落到车上。
+            // 车下的铭牌拿掉之后，中轴只留车，上下留白变大，更像「一屏只有车」。
+            NavigationLink(value: HomeRoute.charge) {
+                VStack(alignment: .leading, spacing: 6) {
+                    meterRow(
+                        value: state?.soc.map(String.init) ?? "--",
+                        unit: "%",
+                        fill: Double((state?.soc ?? 0) / 100),
+                        tint: LeapStyle.accent
+                    )
+                    meterRow(
+                        value: rangeValueText,
+                        unit: "km",
+                        fill: 1,
+                        tint: LeapStyle.ink.opacity(0.32)
+                    )
+                    // 增程车多一条小油量条；纯电车没有这个信号，自然不出现。
+                    if let fuel = state?.gasolinePercent {
+                        meterRow(
+                            value: String(fuel),
+                            unit: "%",
+                            fill: Double(fuel) / 100,
+                            tint: LeapStyle.ink.opacity(0.32)
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 2)
+    }
+
+    /// 一行读数：数字区固定 64pt，两条小线的起点永远对齐，不跟着数字长短漂。
+    /// 数字 16pt 半粗，单位缩到 10pt 灰色；条 44×2.5，读起来是仪表不是图表。
+    private func meterRow(value: String, unit: String, fill: Double, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .tracking(-0.3)
+                    .foregroundStyle(LeapStyle.ink)
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(unit)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(LeapStyle.secondaryLabel)
+            }
+            .frame(width: 64, alignment: .leading)
+
+            Capsule()
+                .fill(.quaternary)
+                .frame(width: 44, height: 2.5)
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: max(2.5, 44 * min(1, max(0, fill))))
+                        .animation(.smooth(duration: 0.6), value: fill)
+                }
+        }
+    }
+
+    /// 副标题 + 车内温度。温度原来挂在车下铭牌上，铭牌撤了就并进这一行，
+    /// 左上角一组信息里就能读完「什么车 · 什么状态 · 多少度」。
+    private var subtitleWithTemp: String {
+        var parts = [subtitle]
+        if let temperature = displayedTemp { parts.append("\(Int(temperature.rounded()))°C") }
+        return parts.joined(separator: " · ")
     }
 
     /// 标题下面这一行既报车况新鲜度，也在有异常时优先报异常。
