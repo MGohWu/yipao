@@ -133,7 +133,8 @@ enum CloudTripMerge {
         local: [TripRecord],
         cloud: [CloudTripRecord],
         window: ClosedRange<Date>,
-        limit: Int = TripLogStore.limit
+        limit: Int = TripLogStore.limit,
+        hiddenKeys: Set<String> = []
     ) -> Result {
         var trips = local
         var added = 0
@@ -149,6 +150,8 @@ enum CloudTripMerge {
         }
 
         for record in cloud.sorted(by: { $0.startAt < $1.startAt }) {
+            // 用户长按删掉的那一条：云端再出现也不合并回来。
+            if hiddenKeys.contains(record.key) { continue }
             if let index = trips.firstIndex(where: { $0.officialKey == record.key }) {
                 apply(record, to: &trips[index])
                 continue
