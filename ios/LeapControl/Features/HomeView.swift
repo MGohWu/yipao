@@ -370,13 +370,13 @@ struct HomeView: View {
                     meterRow(
                         value: state?.soc.map(String.init) ?? "--",
                         unit: "%",
-                        fill: Double((state?.soc ?? 0) / 100),
+                        fill: socFraction,
                         tint: LeapStyle.accent
                     )
                     meterRow(
                         value: rangeValueText,
                         unit: "km",
-                        fill: 1,
+                        fill: socFraction,
                         tint: LeapStyle.ink.opacity(0.32)
                     )
                     // 增程车多一条小油量条；纯电车没有这个信号，自然不出现。
@@ -398,6 +398,10 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 2)
     }
+
+    /// 电量占比。**必须先把 Int 转成 Double 再除**：写成 `Double((soc) / 100)`
+    /// 是整数除法，电量不足 100 时结果恒为 0，电量条就只剩一条缝。
+    private var socFraction: Double { Double(state?.soc ?? 0) / 100 }
 
     /// 一行读数：数字区固定 64pt，两条小线的起点永远对齐，不跟着数字长短漂。
     /// 数字 16pt 半粗，单位缩到 10pt 灰色；条 44×2.5，读起来是仪表不是图表。
