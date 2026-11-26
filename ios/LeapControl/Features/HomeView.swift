@@ -130,8 +130,9 @@ struct HomeView: View {
                                 showSunshade: $showSunshade,
                                 showSunroof: $showSunroof,
                                 showFrunk: $showFrunk,
-                                // 充电开始自动收起第二排圆钮，给充电卡和状态卡让出首屏。
-                                autoCollapse: isChargingNow
+                                // 充电时收起第二排圆钮（给充电卡和状态卡让出首屏），
+                                // 拔枪后自动展回来。
+                                collapseWhileCharging: isChargingNow
                             )
 
                             // 充电时这四张照摆：充电时正好是闲下来看车况的时候，

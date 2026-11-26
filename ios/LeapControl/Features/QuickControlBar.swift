@@ -64,18 +64,26 @@ struct QuickControlBar: View {
     /// 圆钮从 44 放大到 52 之后，一行按 80 算才装得下。
     private static let rowHeight: CGFloat = 80
     private static let rowSpacing: CGFloat = 8
-    private static let expandedKey = "homeQuickControlExpanded"
+    /// 展开状态存哪儿。**换过一次 key**：老 key 下默认值是「收起」，于是不充电时
+    /// 第二排也一直藏着，只剩一颗「更多控制」——那本来只是给充电时腾地方用的。
+    /// 新 key 默认展开，老用户升级后不充电就能看到整排。
+    private static let expandedKey = "homeQuickControlExpandedV2"
 
     @Environment(VehicleStore.self) private var store
     @Binding var showTrunk: Bool
     @Binding var showSunshade: Bool
     @Binding var showSunroof: Bool
     @Binding var showFrunk: Bool
-    /// 充电时为 true：开始充电的那一下把扩展排收起。只管「收」，之后用户手动展开照常。
-    var autoCollapse: Bool = false
+    /// 正在充电。充电时收起第二排（充电卡占了一大块），不充电时恢复展开——
+    /// **双向跟随**，不是只收不回。之前只写了「收」，拔枪后第二排还藏着，
+    /// 看起来就像上锁解锁这排被吃掉了。
+    var collapseWhileCharging: Bool = false
     @State private var controls: [QuickControl]
-    /// 展开状态记住：常用第二行的人不必每次进首页都点一下。
-    @AppStorage(Self.expandedKey) private var expanded = false
+    /// 展开状态记住：常用第二行的人不必每次进首页都点一下。默认展开。
+    @AppStorage(Self.expandedKey) private var expanded = true
+    /// 冷启动时就插着枪的话，`onChange` 不会触发（初值没有「变化」），
+    /// 得在第一次出现时补收一次，否则一进 App 就是两排。
+    @State private var didSyncInitialCharging = false
     @Namespace private var namespace
 
     init(
@@ -83,9 +91,9 @@ struct QuickControlBar: View {
         showSunshade: Binding<Bool>,
         showSunroof: Binding<Bool>,
         showFrunk: Binding<Bool>,
-        autoCollapse: Bool = false
+        collapseWhileCharging: Bool = false
     ) {
-        self.autoCollapse = autoCollapse
+        self.collapseWhileCharging = collapseWhileCharging
         _showTrunk = showTrunk
         _showSunshade = showSunshade
         _showSunroof = showSunroof
@@ -156,11 +164,21 @@ struct QuickControlBar: View {
             }
         }
         .commandBusy(store.isSendingCommand)
-        // 充电开始的那一下把扩展排收起：充电卡已经占了一大块，
-        // 圆钮少一排，状态卡才不至于被顶出首屏。只收一次，
-        // 用户之后手动展开不受影响——充电中也可能要按第二排的钮。
-        .onChange(of: autoCollapse) { _, charging in
-            if charging {
+        // 充电时收起第二排（充电卡占了一大块，圆钮少一排，状态卡才不至于被顶出首屏），
+        // 不充电时恢复展开。**两个方向都要走**：只收不放的话，拔了枪第二排还藏着，
+        // 上锁解锁这一排看起来就像少了一半。
+        //
+        // 只在「充电状态翻转」那一下动，用户充电中手动展开、或者平时手动收起，
+        // 都不会被反复压回去。
+        .onChange(of: collapseWhileCharging) { _, charging in
+            withAnimation(.smooth(duration: 0.28)) { expanded = !charging }
+        }
+        // 冷启动就在充电：上面那个 onChange 等不到，这里补收一次。
+        // 只做第一次，之后切 Tab 回来不再干预用户的手动展开。
+        .onAppear {
+            guard !didSyncInitialCharging else { return }
+            didSyncInitialCharging = true
+            if collapseWhileCharging, expanded {
                 withAnimation(.smooth(duration: 0.28)) { expanded = false }
             }
         }
