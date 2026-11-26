@@ -71,6 +71,8 @@ struct QuickControlBar: View {
     @Binding var showSunshade: Bool
     @Binding var showSunroof: Bool
     @Binding var showFrunk: Bool
+    /// 充电时为 true：开始充电的那一下把扩展排收起。只管「收」，之后用户手动展开照常。
+    var autoCollapse: Bool = false
     @State private var controls: [QuickControl]
     /// 展开状态记住：常用第二行的人不必每次进首页都点一下。
     @AppStorage(Self.expandedKey) private var expanded = false
@@ -80,8 +82,10 @@ struct QuickControlBar: View {
         showTrunk: Binding<Bool>,
         showSunshade: Binding<Bool>,
         showSunroof: Binding<Bool>,
-        showFrunk: Binding<Bool>
+        showFrunk: Binding<Bool>,
+        autoCollapse: Bool = false
     ) {
+        self.autoCollapse = autoCollapse
         _showTrunk = showTrunk
         _showSunshade = showSunshade
         _showSunroof = showSunroof
@@ -152,6 +156,14 @@ struct QuickControlBar: View {
             }
         }
         .commandBusy(store.isSendingCommand)
+        // 充电开始的那一下把扩展排收起：充电卡已经占了一大块，
+        // 圆钮少一排，状态卡才不至于被顶出首屏。只收一次，
+        // 用户之后手动展开不受影响——充电中也可能要按第二排的钮。
+        .onChange(of: autoCollapse) { _, charging in
+            if charging {
+                withAnimation(.smooth(duration: 0.28)) { expanded = false }
+            }
+        }
         // 不再套一层玻璃卡：按钮直接坐在画布上，和车、续航块共用同一个背景。
         // 一页里只允许有两类面——画布、和窄卡片。
         .padding(.horizontal, 2)

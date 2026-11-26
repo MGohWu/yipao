@@ -129,14 +129,15 @@ struct HomeView: View {
                                 showTrunk: $showTrunk,
                                 showSunshade: $showSunshade,
                                 showSunroof: $showSunroof,
-                                showFrunk: $showFrunk
+                                showFrunk: $showFrunk,
+                                // 充电开始自动收起第二排圆钮，给充电卡和状态卡让出首屏。
+                                autoCollapse: isChargingNow
                             )
 
-                            // 充电时不摆这四张：充电卡已经把电量、进度、时长都说了，
-                            // 再摆一排状态卡只会把「在充电」这件事稀释掉。
-                            if !isChargingNow {
-                                statusGrid
-                            }
+                            // 充电时这四张照摆：充电时正好是闲下来看车况的时候，
+                            // 之前藏过一版，反馈是「怎么一充电就少了一排」。
+                            // 腾地方的事交给控制条——充电开始时它的扩展排自动收起。
+                            statusGrid
 
                             privacyNote
                         }
