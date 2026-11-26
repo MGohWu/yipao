@@ -198,6 +198,7 @@ struct HomeView: View {
                     case .climate: ClimateView()
                     case .location: VehicleLocationView()
                     case .trips: MileageStatsView()
+                    case .tripHistory: TripHistoryView(defaultRange: .today)
                     case .settings: SettingsView()
                     }
                 }
@@ -288,7 +289,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
 
-            NavigationLink(value: HomeRoute.trips) {
+            NavigationLink(value: HomeRoute.tripHistory) {
                 statusCard(icon: "road.lanes", title: "今日行程", value: todayTripSummary)
             }
             .buttonStyle(.plain)
@@ -313,27 +314,31 @@ struct HomeView: View {
         alert: Bool = false,
         tint: Color = LeapStyle.secondaryLabel
     ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
+        // 标题小一号灰着、数值大半档立起来——同类型卡片统一这组字阶，
+        // 视线扫过去先看到四个数值，标签是注脚不是主角。
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                 Text(title)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
             }
             .foregroundStyle(LeapStyle.secondaryLabel)
 
             Text(value)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .monospacedDigit()
                 .foregroundStyle(alert ? LeapStyle.alert : (tint == LeapStyle.secondaryLabel ? LeapStyle.ink : tint))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LeapStyle.surface, in: .rect(cornerRadius: 14, style: .continuous))
-        .contentShape(.rect(cornerRadius: 14, style: .continuous))
+        // 圆角 14 和全局 24/28 的体系脱节，同排的玻璃卡都是大圆角，就它方得突兀。
+        .background(LeapStyle.surface, in: .rect(cornerRadius: 18, style: .continuous))
+        .contentShape(.rect(cornerRadius: 18, style: .continuous))
     }
 
     private var doorWindowSummary: String {
@@ -404,7 +409,7 @@ struct HomeView: View {
     private var socFraction: Double { Double(state?.soc ?? 0) / 100 }
 
     /// 一行读数：数字区固定 64pt，两条小线的起点永远对齐，不跟着数字长短漂。
-    /// 数字 16pt 半粗，单位缩到 10pt 灰色；条 44×2.5，读起来是仪表不是图表。
+    /// 数字 16pt 半粗，单位缩到 10pt 灰色；条 60×3.5，读起来是仪表不是图表。
     private func meterRow(value: String, unit: String, fill: Double, tint: Color) -> some View {
         HStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -424,11 +429,11 @@ struct HomeView: View {
 
             Capsule()
                 .fill(.quaternary)
-                .frame(width: 44, height: 2.5)
+                .frame(width: 60, height: 3.5)
                 .overlay(alignment: .leading) {
                     Capsule()
                         .fill(tint)
-                        .frame(width: max(2.5, 44 * min(1, max(0, fill))))
+                        .frame(width: max(3.5, 60 * min(1, max(0, fill))))
                         .animation(.smooth(duration: 0.6), value: fill)
                 }
         }
@@ -1460,6 +1465,9 @@ enum HomeRoute: Hashable {
     /// 行程页：零跑官方的里程能耗（见 `MileageStatsView`）。
     /// 老深链 `mileage` / `mileageStats` 继续认，桌面上已经建好的快捷方式不能失效。
     case trips
+    /// 逐趟行程记录（`TripHistoryView`），默认停在「今日」。首页那张「今日行程」卡走这里——
+    /// 卡上写的是今天的趟数和里程，跳去累计页等于答非所问；累计入口在下面那排车况栏里。
+    case tripHistory
     case settings
 
     init?(deepLink: String) {
@@ -1467,6 +1475,7 @@ enum HomeRoute: Hashable {
         case "charge": self = .charge
         case "climate": self = .climate
         case "location": self = .location
+        case "triplog": self = .tripHistory
         case "trips", "mileage", "mileageStats": self = .trips
         case "settings": self = .settings
         default: return nil

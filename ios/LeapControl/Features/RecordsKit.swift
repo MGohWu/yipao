@@ -9,11 +9,12 @@ import SwiftUI
 // MARK: - 时间范围
 
 enum RecordsRange: String, CaseIterable, Identifiable {
-    case week, month, all
+    case today, week, month, all
 
     var id: String { rawValue }
     var title: String {
         switch self {
+        case .today: return "今日"
         case .week: return "近 7 天"
         case .month: return "近 30 天"
         case .all: return "全部"
@@ -21,12 +22,19 @@ enum RecordsRange: String, CaseIterable, Identifiable {
     }
 
     /// 图表画几根柱子。`全部` 也只画最近 30 天——再多柱子就成了噪声。
-    var chartDays: Int { self == .week ? 7 : 30 }
+    var chartDays: Int {
+        switch self {
+        case .today: return 1
+        case .week: return 7
+        case .month, .all: return 30
+        }
+    }
 
     /// 过滤起点。`全部` 返回 nil。
     func start(now: Date = .now) -> Date? {
-        guard let days = self == .all ? nil : (self == .week ? 7 : 30) else { return nil }
         let calendar = Calendar.current
+        if self == .today { return calendar.startOfDay(for: now) }
+        guard let days = self == .all ? nil : (self == .week ? 7 : 30) else { return nil }
         let today = calendar.startOfDay(for: now)
         return calendar.date(byAdding: .day, value: -(days - 1), to: today)
     }

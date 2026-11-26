@@ -9,11 +9,17 @@ import SwiftUI
 struct TripHistoryView: View {
     @Environment(VehicleStore.self) private var store
     @StateObject private var recorder = TripRecorder.shared
-    @State private var range: RecordsRange = .week
+    /// 默认落在哪个时间档由入口决定：首页「今日行程」卡进来直接看今天，
+    /// 行程 Tab 里还是「近 7 天」。选档之后用户自己切，页面不替他锁死。
+    @State private var range: RecordsRange
     /// 地名补齐的进度：正在补哪一条。补的时候那行显示一个细进度条，不遮内容。
     @State private var resolvingID: UUID?
     /// 长按后待确认删除的那一条。
     @State private var pendingDelete: TripRecord?
+
+    init(defaultRange: RecordsRange = .week) {
+        _range = State(initialValue: defaultRange)
+    }
 
     private var vin: String? { store.session.selectedVin }
 

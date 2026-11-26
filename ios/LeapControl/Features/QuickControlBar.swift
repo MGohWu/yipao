@@ -61,7 +61,8 @@ enum QuickControl: String, CaseIterable, Identifiable {
 struct QuickControlBar: View {
     /// 一行摆几个。9 项全支持时收起 4 个、展开后再摆两行（4 + 1）。
     private static let rowCapacity = 4
-    private static let rowHeight: CGFloat = 70
+    /// 圆钮从 44 放大到 52 之后，一行按 80 算才装得下。
+    private static let rowHeight: CGFloat = 80
     private static let rowSpacing: CGFloat = 8
     private static let expandedKey = "homeQuickControlExpanded"
 
@@ -367,11 +368,11 @@ struct QuickControlButton: View {
             taps += 1
             action()
         } label: {
-            VStack(spacing: 7) {
+            VStack(spacing: 8) {
                 ZStack {
                     Circle()
                         .fill(circleFill)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 52, height: 52)
                         .overlay {
                             Circle().stroke(highlighted ? .clear : LeapStyle.hairline, lineWidth: 1)
                         }
@@ -381,7 +382,7 @@ struct QuickControlButton: View {
                                 radius: 8, y: 3)
 
                     Image(systemName: systemImage)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(glyphColor)
                         .symbolEffect(.bounce, value: taps)
