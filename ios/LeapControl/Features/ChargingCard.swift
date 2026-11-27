@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 首页的充电模块：插枪在充时出现，回答三个问题——**还要多久、多大功率、充到哪儿了**。
+/// 首页的充电模块：插枪在充时出现，回答四个问题——**还要多久、多大功率、
+/// 现在多少伏多少安、充到哪儿了**。
 ///
 /// 参照原厂控车 App 的充电卡：上面一行状态与功率，中间一个大号的「还剩多久」，
 /// 下面一条进度（当前电量 → 目标电量），最后一行是已充度数的流水。
@@ -33,6 +34,21 @@ struct ChargingCard: View {
     private var target: Int { min(100, max(1, state.chargeLimit ?? 100)) }
     private var soc: Int? { state.soc }
     private var power: Double? { state.chargePowerKW }
+
+    /// 动力电池总电压（V，信号 `1177`）。充电时端电压高于静置电压，是实报的实时值。
+    private var voltage: Double? { state.batteryVoltage }
+    /// 充电电流（A，信号 `1178`）。车报的是**流进电池为负**（充电 −8.7 A 这种），
+    /// 展示时取绝对值——车主关心的是「充多大电流」，不是坐标系方向。
+    private var chargingCurrent: Double? { state.batteryCurrent.map(abs) }
+
+    /// 电压 · 电流这行实时电参数据。缺哪个就只显示有的那个，都缺就不占位——
+    /// 宁可少一项，不编一个 0.0 V 出来。
+    private var electricalText: String? {
+        var parts: [String] = []
+        if let voltage { parts.append(String(format: "%.1f V", voltage)) }
+        if let chargingCurrent { parts.append(String(format: "%.1f A", chargingCurrent)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
     private var progress: Double {
         guard let soc else { return 0 }
@@ -122,11 +138,26 @@ struct ChargingCard: View {
 
             Spacer(minLength: 8)
 
-            if !finished, let power, power > 0 {
-                Text(String(format: "%.1f kW", power))
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(LeapStyle.ink)
+            if !finished {
+                // 功率下面挂一行实时电压/电流（车端信号 1177/1178，10 秒一刷）。
+                // 功率本身就是电压 × 电流算出来的，三项摆在一起，数字互相能对上，
+                // 车主一眼就能看出「功率为什么是这个数」。
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let power, power > 0 {
+                        Text(String(format: "%.1f kW", power))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(LeapStyle.ink)
+                            .contentTransition(.numericText())
+                    }
+                    if let electrical = electricalText {
+                        Text(electrical)
+                            .font(.system(size: 11, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(LeapStyle.secondaryLabel)
+                            .contentTransition(.numericText())
+                    }
+                }
             }
 
             // 22pt 的小三角，比整张卡片可点安全：卡片本身还要显示信息，
