@@ -39,6 +39,16 @@ struct ChargingCard: View {
         return min(1, max(0, Double(soc) / Double(target)))
     }
 
+    /// 本次充电已结束（车报 `chargeState == 2`：充满、手动停充都走这个值）。
+    /// 卡片不因此消失，改画收尾状态——「充完了」必须有个交代，整张消失
+    /// 会让人以为数据丢了。枪拔没拔由首页决定（拔了整卡隐藏）。
+    private var finished: Bool { state.chargeState == 2 }
+
+    /// 结束方式的措辞：充满和停充共用 `chargeState == 2`，用电量到没到目标区分。
+    private var finishedLabel: String {
+        (soc ?? 0) >= target ? "已充满" : "已结束充电"
+    }
+
     private var remainingMinutes: Int? {
         if let minutes = state.chargeRemainMinutes, minutes > 0, minutes <= 36 * 60 {
             return minutes
@@ -62,12 +72,16 @@ struct ChargingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
-            headline
+            if finished {
+                finishedHeadline
+            } else {
+                headline
+            }
             progressBar
             footer
 
             // 展开后才占高度：收起时卡片和原来一模一样，不因为多了个入口变高。
-            if showStopAction {
+            if showStopAction, !finished {
                 stopAction
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -75,27 +89,40 @@ struct ChargingCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LeapStyle.surface, in: .rect(cornerRadius: 18, style: .continuous))
+        .animation(.smooth(duration: 0.4), value: finished)
     }
 
     private var header: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(LeapStyle.accent)
-                .frame(width: 6, height: 6)
-                .overlay {
-                    Circle()
-                        .stroke(LeapStyle.accent.opacity(0.45), lineWidth: 1)
-                        .scaleEffect(1.9)
-                }
+            if finished {
+                // 收尾状态用一颗实心对勾替换脉冲圆点：圆点是「进行中」的语言，
+                // 对勾是「办完了」的语言，一眼区分两个阶段。
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LeapStyle.accent)
+                Text("充电完成")
+                    .font(.system(size: 12, weight: .medium))
+                    .tracking(0.3)
+                    .foregroundStyle(LeapStyle.accent)
+            } else {
+                Circle()
+                    .fill(LeapStyle.accent)
+                    .frame(width: 6, height: 6)
+                    .overlay {
+                        Circle()
+                            .stroke(LeapStyle.accent.opacity(0.45), lineWidth: 1)
+                            .scaleEffect(1.9)
+                    }
 
-            Text("充电中")
-                .font(.system(size: 12, weight: .medium))
-                .tracking(0.3)
-                .foregroundStyle(LeapStyle.accent)
+                Text("充电中")
+                    .font(.system(size: 12, weight: .medium))
+                    .tracking(0.3)
+                    .foregroundStyle(LeapStyle.accent)
+            }
 
             Spacer(minLength: 8)
 
-            if let power, power > 0 {
+            if !finished, let power, power > 0 {
                 Text(String(format: "%.1f kW", power))
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .monospacedDigit()
@@ -104,19 +131,48 @@ struct ChargingCard: View {
 
             // 22pt 的小三角，比整张卡片可点安全：卡片本身还要显示信息，
             // 整块可点会让「想看数据」和「想停充电」撞在同一个手势上。
-            Button {
-                withAnimation(.smooth(duration: 0.24)) { showStopAction.toggle() }
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(LeapStyle.secondaryLabel)
-                    .rotationEffect(.degrees(showStopAction ? 180 : 0))
-                    .frame(width: 22, height: 22)
-                    .contentShape(.rect)
+            // 充完就没有可停的东西了，这个入口整个撤掉。
+            if !finished {
+                Button {
+                    withAnimation(.smooth(duration: 0.24)) { showStopAction.toggle() }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(LeapStyle.secondaryLabel)
+                        .rotationEffect(.degrees(showStopAction ? 180 : 0))
+                        .frame(width: 22, height: 22)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("更多充电操作")
+                .accessibilityHint(showStopAction ? "收起结束充电" : "展开结束充电")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("更多充电操作")
-            .accessibilityHint(showStopAction ? "收起结束充电" : "展开结束充电")
+        }
+    }
+
+    /// 充电结束后的主行：大号当前电量 + 一句话说明结束方式。
+    /// 「已充满」上强调绿，「已结束充电」（提前停的）保持中性灰——
+    /// 没充满不是错误，不该用告警色。
+    private var finishedHeadline: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            if let soc {
+                Text("\(soc)%")
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .tracking(-0.8)
+                    .foregroundStyle(LeapStyle.ink)
+            }
+
+            Spacer(minLength: 6)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(finishedLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle((soc ?? 0) >= target ? LeapStyle.accent : LeapStyle.secondaryLabel)
+                Text("目标 \(target)%")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 

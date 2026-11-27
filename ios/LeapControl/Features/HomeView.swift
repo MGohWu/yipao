@@ -95,6 +95,17 @@ struct HomeView: View {
         return (state.chargePowerKW ?? 0) >= 0.5 && state.chargeGunConnected != false
     }
 
+    /// 充电卡什么时候出现：在充，**或者刚充完但枪还没拔**。
+    /// 之前只看「在充」，一充满卡片整张凭空消失，车主反而以为数据丢了、
+    /// 甚至以为充电出了岔子。车报 `chargeState == 2`（本次充电已结束）时，
+    /// 卡片留在原地改画「充电完成」，枪拔掉（读到已拔）才彻底翻篇。
+    private var showsChargeCard: Bool {
+        guard let state else { return false }
+        if isChargingNow { return true }
+        if state.chargeState == 2 { return state.chargeGunConnected != false }
+        return false
+    }
+
     /// 背景色随车辆当前最显著的状态走。
     private var backgroundTint: Color {
         if state?.isCharging == true { return LeapStyle.accent }
@@ -115,8 +126,9 @@ struct HomeView: View {
                             dashboardHeader
                             VehicleHero(size: heroSize, badges: statusBadges)
 
-                            if isChargingNow, let liveState = state {
+                            if showsChargeCard, let liveState = state {
                                 // 充电时这张卡提到控制条上方：插着枪，「还要多久」比什么都重要。
+                                // 充完后（枪没拔）它留着报「充电完成」，不是消失。
                                 ChargingCard(
                                     state: liveState,
                                     active: chargeRecorder.active,

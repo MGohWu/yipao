@@ -1,4 +1,20 @@
 import SwiftUI
+import UIKit
+
+/// 控车按键的触感反馈。
+///
+/// 发指令的动作统一 `medium` 一档：这是「指令已发出」的确认，不是状态切换的庆祝，
+/// 所有按钮轻重一致，才不会让人从震感里读出别的含义。非控车的辅助交互（展开/收起）
+/// 用 `light`——它没有指令要发，只是告诉手指「点到了」。
+enum ControlHaptic {
+    static func tap() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    static func light() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}
 
 enum QuickControl: String, CaseIterable, Identifiable {
     /// 上锁。rawValue 沿用原来那个翻转式「车锁」的 `lock`，存过的排序不用迁移这一格。
@@ -202,6 +218,7 @@ struct QuickControlBar: View {
 
     private var expandToggle: some View {
         Button {
+            ControlHaptic.light()
             withAnimation(.smooth(duration: 0.28)) { expanded.toggle() }
         } label: {
             HStack(spacing: 4) {
@@ -396,6 +413,9 @@ struct QuickControlButton: View {
     var body: some View {
         Button {
             taps += 1
+            // 车要 5-10 秒才动作，震动是按下那一瞬唯一的确认，没有它会让人
+            // 以为没点到而连按。缩放动画在屏幕上，这颗在手指上，两头都要有。
+            ControlHaptic.tap()
             action()
         } label: {
             VStack(spacing: 8) {
