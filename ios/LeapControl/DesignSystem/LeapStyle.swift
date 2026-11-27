@@ -7,7 +7,7 @@ import UIKit
 /// （在充电 = 绿、异常 = 红、加热 = 橙）。这和 `stephenwang1011/leapauto` 的做法一致——
 /// 玻璃是承载车辆状态的容器，花花绿绿的背景会把车本身盖过去。
 ///
-/// 画布是接近中性的暖灰（浅）/ 曜石黑（深），带一层很淡的光；卡片靠折射和边缘高光立起来，
+/// 画布：冷灰蓝（浅）/ 曜石黑（深），带一层很淡的光；卡片靠折射和边缘高光立起来，
 /// 不再靠彩色光晕。
 enum LeapStyle {
     static let cardRadius: CGFloat = 28
@@ -15,74 +15,77 @@ enum LeapStyle {
 
     // MARK: - 配色
     //
-    // 五组色都是明暗两套。浅色版是压暗过的——同一套颜色铺在浅色玻璃上当文字，
-    // 对比度不够（WCAG AA 要 4.5:1）；深色版则是提亮过的，放在深底上才立得起来。
+    // 五组色都是明暗两套。浅色版（2026-11-27 重做，用户选定「冷调科技白」方向）：
+    // 冷灰蓝画布 + 纯白卡片 + 蓝黑墨色，绿色只表达「有电在流动」。
+    // 深色版保持曜石黑不动。
     //
     // 注意：这些色同时被拿去画背景的极光。极光是大面积色块，用不了压暗的版本，
     // 所以 `LeapBackground` 会按明暗各自混色，见那边的说明。
 
-    /// 强调色：深绿。**只表示「有电在流动」**——充电中、刚充满、电量健康。
-    /// 色相压得比常见的「新能源绿」更暗、更灰，配暖白纸感底色才不刺眼。
+    /// 强调色：充电绿。**只表示「有电在流动」**——充电中、刚充满、电量健康。
+    /// 浅色版压到 #0C8A4A：直接用亮绿（#12A150）在白底上当小号文字对比度只有 3.4:1，
+    /// 达不到 AA；压这一档既保住「绿」的鲜活，小字也读得清。
     static let accent = adaptive(
-        light: Color(red: 0.18, green: 0.42, blue: 0.31),
+        light: Color(red: 0.047, green: 0.541, blue: 0.290),
         dark: Color(red: 0.19, green: 0.82, blue: 0.35)
     )
 
-    /// 卡片底色。暗色下比纯黑亮一档，卡片才浮得起来；浅色下就是白。
+    /// 卡片底色。暗色下比纯黑亮一档，卡片才浮得起来；浅色下就是纯白。
     static let surface = adaptive(
         light: Color.white,
         dark: Color(red: 0.086, green: 0.086, blue: 0.094)
     )
 
-    /// 链接色：只给「能点进去」的那几处（位置、充电上限）。
+    /// 链接色：只给「能点进去」的那几处（位置、充电上限）。冷调蓝。
     static let link = adaptive(
-        light: Color(red: 0.18, green: 0.36, blue: 0.82),
+        light: Color(red: 0.141, green: 0.392, blue: 0.784),
         dark: Color(red: 0.24, green: 0.42, blue: 0.88)
     )
 
-    /// 界面主色：墨。选中态、主按钮、Tab 用它。
+    /// 界面主色：墨。选中态、主按钮、Tab 用它。蓝黑（#101828），比暖黑更「科技」。
     static let ink = adaptive(
-        light: Color(red: 0.12, green: 0.11, blue: 0.09),
+        light: Color(red: 0.063, green: 0.094, blue: 0.157),
         dark: Color(red: 0.96, green: 0.96, blue: 0.97)
     )
 
-    /// 警示：砖红。胎压异常、门没关、没锁车。
+    /// 警示：红。胎压异常、门没关、没锁车。
     static let alert = adaptive(
-        light: Color(red: 0.70, green: 0.15, blue: 0.12),
+        light: Color(red: 0.72, green: 0.16, blue: 0.13),
         dark: Color(red: 1.0, green: 0.27, blue: 0.23)
     )
 
-    /// 冷色：石灰。位置、导航这类中性信息。
+    /// 冷色：蓝灰。位置、导航这类中性信息（#667085）。
     static let cool = adaptive(
-        light: Color(red: 0.43, green: 0.41, blue: 0.38),
+        light: Color(red: 0.40, green: 0.44, blue: 0.52),
         dark: Color(red: 0.72, green: 0.70, blue: 0.66)
     )
-    /// 暖色：赭石。座椅/方向盘加热。
+    /// 暖色：橙。座椅/方向盘加热。
     static let warm = adaptive(
-        light: Color(red: 0.55, green: 0.35, blue: 0.11),
+        light: Color(red: 0.69, green: 0.30, blue: 0.06),
         dark: Color(red: 0.90, green: 0.72, blue: 0.45)
     )
     /// 提醒：和告警同色系但轻一档——补记、暂不可用这类「知道就好」的状态。
     static let caution = adaptive(
-        light: Color(red: 0.52, green: 0.38, blue: 0.12),
+        light: Color(red: 0.58, green: 0.38, blue: 0.02),
         dark: Color(red: 1.0, green: 0.82, blue: 0.58)
     )
 
     /// 除霜专用。不能用 `.primary`：深色模式下它是纯白，玻璃按钮被白色一染就成了亮底。
     static let frost = adaptive(
-        light: Color(red: 0.10, green: 0.40, blue: 0.42),
+        light: Color(red: 0.055, green: 0.455, blue: 0.565),
         dark: Color(red: 0.42, green: 0.82, blue: 0.84)
     )
 
     /// 「有值但不是当前重点」的填充。
     static let mutedFill = adaptive(
-        light: Color(white: 0.55),
+        light: Color(red: 0.40, green: 0.44, blue: 0.51),
         dark: Color(white: 1.0).opacity(0.6)
     )
 
     /// 首页那辆车的填充。不能用 `.primary`——浅色下会变成一整块纯黑剪影。
+    /// 冷调下车身是蓝黑（#2B3444），和墨色同族，不是纯黑。
     static let vehicleSilhouette = adaptive(
-        light: Color(red: 0.30, green: 0.28, blue: 0.25),
+        light: Color(red: 0.169, green: 0.204, blue: 0.267),
         dark: Color(red: 0.95, green: 0.94, blue: 0.91)
     )
 
@@ -96,15 +99,15 @@ enum LeapStyle {
     static let secondaryLabel = Color(uiColor: .secondaryLabel)
 
     /// 玻璃降级后的边缘线。iOS 26 的液态玻璃自带边缘高光，低版本的毛玻璃没有，
-    /// 卡片和背景会糊成一片，得手动描一道。
+    /// 卡片和背景会糊成一片，得手动描一道。浅色随冷调画布走（#E4E7EC）。
     static let glassEdge = adaptive(
-        light: Color(red: 0.85, green: 0.83, blue: 0.79),
+        light: Color(red: 0.894, green: 0.906, blue: 0.925),
         dark: Color.white.opacity(0.10)
     )
 
     /// 卡片里那条分隔线。比 `.quaternary` 更淡一点，成排卡片看着才不吵。
     static let hairline = adaptive(
-        light: Color(red: 0.855, green: 0.835, blue: 0.796),
+        light: Color(red: 0.894, green: 0.906, blue: 0.925),
         dark: Color(red: 0.14, green: 0.14, blue: 0.15)
     )
 
@@ -160,15 +163,18 @@ struct LeapBackground: View {
         }
     }
 
-    // MARK: - 浅色：暖浅灰 + 顶部反射
+    // MARK: - 浅色：冷灰蓝 + 顶部反射
+    //
+    // 2026-11-27 随「冷调科技白」主题一起重做：原来那层暖灰（黄相明显，
+    // 车主反馈「发旧」）换成冷灰蓝，白卡片落在上面才真的「白」。
 
     private var lightLayers: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.972, green: 0.962, blue: 0.942),
-                    Color(red: 0.955, green: 0.944, blue: 0.922),
-                    Color(red: 0.925, green: 0.914, blue: 0.888)
+                    Color(red: 0.969, green: 0.976, blue: 0.984),
+                    Color(red: 0.953, green: 0.961, blue: 0.973),
+                    Color(red: 0.929, green: 0.941, blue: 0.957)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -176,7 +182,7 @@ struct LeapBackground: View {
 
             // 顶部一层极淡的白，模拟屏幕边缘的反射，避免整片灰到底。
             RadialGradient(
-                colors: [Color.white.opacity(0.85), .clear],
+                colors: [Color.white.opacity(0.7), .clear],
                 center: .init(x: 0.5, y: -0.05),
                 startRadius: 10,
                 endRadius: 480
@@ -184,10 +190,11 @@ struct LeapBackground: View {
         }
     }
 
-    /// 暗角。四周压一点点，视觉重心收到中间。
+    /// 暗角。四周压一点点，视觉重心收到中间。浅色下收得更轻——冷调画布
+    /// 本来就浅，压重了会显脏。
     private var vignette: some View {
         RadialGradient(
-            colors: [.clear, .clear, Color.black.opacity(isDark ? 0.0 : 0.08)],
+            colors: [.clear, .clear, Color.black.opacity(isDark ? 0.0 : 0.06)],
             center: .init(x: 0.5, y: 0.38),
             startRadius: 80,
             endRadius: 640
